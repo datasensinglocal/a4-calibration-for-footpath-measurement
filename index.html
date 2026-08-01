@@ -1,0 +1,2812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Footpath Profiler — Sensing Local</title>
+<style>
+:root {
+  --bg:#0c1220; --surface:#162032; --surface2:#1e2d42; --border:#253449;
+  --building:#f59e0b; --kerb:#2dd4bf; --vp:#10b981;
+  --text:#f0f4f8; --muted:#6b84a0; --faint:#253449;
+  --yellow:#fde047; --accent:#3b82f6; --accent2:#6366f1;
+  --danger:#ef4444; --success:#22c55e; --warn:#f59e0b;
+  --r:12px; --r-sm:8px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#060d1a;color:var(--text);
+  overscroll-behavior:contain;min-height:100vh;
+}
+.page{
+  max-width:500px;margin:0 auto;min-height:100vh;
+  background:var(--bg);display:flex;flex-direction:column;
+  position:relative;
+}
+.page.hidden{display:none;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+
+/* ══════════════════ LOGIN PAGE ══════════════════ */
+.login-bg{
+  position:absolute;inset:0;pointer-events:none;overflow:hidden;
+}
+.login-bg::before{
+  content:'';position:absolute;top:-80px;left:-80px;
+  width:400px;height:400px;border-radius:50%;
+  background:radial-gradient(circle,rgba(59,130,246,0.12) 0%,transparent 70%);
+}
+.login-bg::after{
+  content:'';position:absolute;bottom:-60px;right:-40px;
+  width:300px;height:300px;border-radius:50%;
+  background:radial-gradient(circle,rgba(16,185,129,0.08) 0%,transparent 70%);
+}
+.login-wrap{
+  flex:1;display:flex;flex-direction:column;
+  padding:36px 24px 32px;gap:20px;position:relative;z-index:1;
+}
+.login-logo{padding:16px 0 12px;}
+.login-logo .eyebrow{
+  font-size:11px;font-weight:600;letter-spacing:2px;
+  color:var(--muted);text-transform:uppercase;margin-bottom:10px;
+}
+.login-logo h1{
+  font-size:28px;font-weight:800;letter-spacing:-0.5px;
+  line-height:1.2;
+}
+.login-logo h1 span{color:var(--accent);}
+.login-logo p{color:var(--muted);font-size:13px;margin-top:6px;}
+
+.form-group{display:flex;flex-direction:column;gap:6px;}
+.form-label{
+  font-size:11px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:0.8px;
+}
+.form-input,.form-select{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:13px 14px;color:var(--text);
+  font-size:15px;width:100%;outline:none;
+  transition:border-color 0.2s;-webkit-appearance:none;
+  font-family:inherit;
+}
+.form-input:focus,.form-select:focus{border-color:var(--accent);}
+.form-select option{background:var(--surface);}
+.form-hint{font-size:11px;color:var(--muted);margin-top:2px;}
+.form-row{display:flex;gap:10px;}
+.form-row .form-group{flex:1;}
+
+.btn-primary{
+  background:var(--accent);color:white;border:none;
+  border-radius:var(--r);padding:15px;font-size:16px;
+  font-weight:700;cursor:pointer;width:100%;
+  touch-action:manipulation;font-family:inherit;
+  transition:opacity 0.15s,transform 0.1s;
+  letter-spacing:0.2px;
+}
+.btn-primary:active{opacity:0.85;transform:scale(0.99);}
+
+.divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ══════════════════ MAIN PAGE ══════════════════ */
+.main-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;border-bottom:1px solid var(--border);
+  flex-shrink:0;background:var(--bg);position:sticky;top:0;z-index:10;
+}
+.hdr-left{display:flex;flex-direction:column;}
+.hdr-brand{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;}
+.hdr-user{font-size:14px;font-weight:700;color:var(--text);}
+.hdr-actions{display:flex;gap:8px;}
+.icon-btn-sm{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:8px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  touch-action:manipulation;transition:background 0.15s;
+  color:var(--muted);
+}
+.icon-btn-sm:active{background:var(--surface2);}
+.icon-btn-sm.active{background:rgba(59,130,246,0.15);border-color:var(--accent);color:var(--accent);}
+
+/* ── IMAGE AREA ── */
+.vwrap{
+  position:relative;width:94%;margin:12px auto;
+  background:#000;border-radius:var(--r);overflow:hidden;
+  border:1px solid var(--border);flex-shrink:0;touch-action:none;
+}
+#svg{display:block;touch-action:none;width:100%;height:auto;}
+.empty{
+  min-height:280px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  color:var(--muted);gap:18px;
+}
+.upload-btns{display:flex;gap:10px;}
+.upload-btn{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px 18px;font-size:14px;
+  color:var(--text);cursor:pointer;display:flex;
+  align-items:center;gap:7px;touch-action:manipulation;
+  font-weight:600;font-family:inherit;transition:background 0.15s;
+}
+.upload-btn:active{background:var(--surface2);}
+.img-actions{
+  position:absolute;top:10px;left:10px;
+  display:flex;gap:6px;pointer-events:auto;
+}
+.pill-btn{
+  background:rgba(12,18,32,0.88);backdrop-filter:blur(8px);
+  border:1px solid var(--border);border-radius:20px;
+  padding:6px 12px;font-size:12px;color:var(--muted);
+  cursor:pointer;touch-action:manipulation;
+  display:flex;align-items:center;gap:5px;
+  font-family:inherit;transition:color 0.15s;
+}
+.pill-btn:active{color:var(--text);}
+.ovr{
+  position:absolute;bottom:10px;right:10px;
+  display:flex;align-items:center;gap:8px;pointer-events:none;
+}
+.icon-btn{
+  background:rgba(30,45,66,0.9);backdrop-filter:blur(6px);
+  border-radius:var(--r-sm);padding:8px;pointer-events:auto;
+  cursor:pointer;display:flex;border:1px solid rgba(255,255,255,0.1);
+  touch-action:manipulation;
+}
+.side-tag{
+  background:white;color:#0c1220;border-radius:var(--r-sm);
+  padding:5px 12px;font-weight:800;font-size:15px;
+}
+.hint{text-align:center;font-size:11px;color:var(--muted);padding:4px 0 2px;}
+
+/* ── MEASUREMENT ── */
+.ftr{padding:10px 18px 0;display:flex;flex-direction:column;gap:8px;}
+.ftr-r1{display:flex;align-items:center;justify-content:space-between;}
+.flbl{color:var(--muted);font-size:13px;font-weight:500;}
+.vpill{
+  background:var(--surface);border-radius:24px;
+  padding:6px 20px;border:1px solid var(--border);
+}
+.vval{font-size:26px;font-weight:800;color:white;font-family:monospace;}
+.ftr-r2{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.ngrp{display:flex;gap:8px;}
+.nbtn{
+  background:var(--surface);border:1px solid var(--border);
+  width:40px;height:40px;border-radius:var(--r-sm);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;touch-action:manipulation;
+}
+.nbtn:active{opacity:0.7;}
+.cal-badge{
+  font-size:11px;color:var(--muted);
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:20px;padding:4px 10px;cursor:pointer;
+}
+.cal-badge.calibrated{color:var(--success);border-color:rgba(34,197,94,0.3);}
+
+/* ── MATERIALS ── */
+.mat-sec{padding:14px 18px 0;}
+.sec-lbl{
+  font-size:10px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;
+}
+.mat-grid{display:flex;gap:10px;}
+.mat-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  gap:6px;cursor:pointer;touch-action:manipulation;
+}
+.mat-thumb{
+  width:56px;height:56px;border-radius:10px;
+  border:2px solid var(--border);overflow:hidden;
+  transition:border-color 0.15s,box-shadow 0.15s;
+}
+.mat-item.sel .mat-thumb{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px rgba(59,130,246,0.25);
+}
+.mat-name{font-size:11px;color:var(--muted);font-weight:600;text-align:center;}
+.mat-item.sel .mat-name{color:var(--accent);}
+
+/* ── SUBMIT ── */
+.submit-sec{padding:14px 18px 16px;}
+.btn-submit{
+  background:var(--text);color:#0c1220;border:none;
+  border-radius:var(--r);padding:14px;font-size:15px;
+  font-weight:800;cursor:pointer;touch-action:manipulation;
+  width:100%;font-family:inherit;letter-spacing:0.3px;
+  transition:opacity 0.15s,transform 0.1s;
+}
+.btn-submit:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-submit:active:not(:disabled){opacity:0.85;transform:scale(0.99);}
+.status-msg{
+  font-size:12px;color:var(--muted);text-align:center;
+  margin-top:6px;min-height:16px;transition:color 0.2s;
+}
+.status-msg.ok{color:var(--success);}
+.status-msg.err{color:var(--danger);}
+
+/* ── RECORDS ── */
+.recsec{padding:0 18px 24px;display:none;}
+.rechead{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:8px;
+}
+.recttl{color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;}
+.expbtn{
+  font-size:11px;padding:4px 10px;border:1px solid var(--border);
+  border-radius:6px;background:transparent;color:var(--muted);
+  cursor:pointer;touch-action:manipulation;font-family:inherit;
+}
+.expbtn:hover{background:var(--surface);}
+table{width:100%;border-collapse:collapse;font-size:11px;font-family:monospace;}
+th{color:#475569;font-size:9px;padding:4px 5px;text-align:left;border-bottom:1px solid var(--border);}
+td{padding:5px 5px;border-bottom:1px solid var(--faint);color:var(--muted);}
+td.hi{color:white;font-weight:700;}
+
+/* ══════════════════ MODALS ══════════════════ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);
+  display:flex;align-items:flex-end;justify-content:center;
+  z-index:100;padding-bottom:env(safe-area-inset-bottom,0px);
+}
+.modal-sheet{
+  background:var(--bg);border-radius:20px 20px 0 0;
+  width:100%;max-width:500px;padding:24px 24px 32px;
+  border-top:1px solid var(--border);max-height:90vh;overflow-y:auto;
+}
+.modal-handle{
+  width:36px;height:4px;background:var(--border);
+  border-radius:2px;margin:0 auto 20px;
+}
+.modal-title{font-size:20px;font-weight:800;margin-bottom:4px;letter-spacing:-0.3px;}
+.modal-sub{font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.5;}
+.modal-actions{display:flex;gap:10px;margin-top:16px;}
+.btn-secondary{
+  flex:1;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:13px;font-size:14px;
+  color:var(--text);cursor:pointer;font-weight:600;
+  touch-action:manipulation;font-family:inherit;
+  transition:background 0.15s;
+}
+.btn-secondary:active{background:var(--surface2);}
+.btn-danger{
+  color:var(--danger)!important;border-color:rgba(239,68,68,0.3)!important;
+}
+
+.info-card{
+  background:var(--surface);border-radius:var(--r);
+  padding:14px;font-size:12px;color:var(--muted);
+  margin-bottom:16px;border:1px solid var(--border);
+  line-height:1.8;
+}
+.info-card strong{color:var(--text);}
+
+/* ── CALIBRATION ── */
+.cal-steps{
+  display:flex;flex-direction:column;gap:10px;margin-bottom:18px;
+}
+.cal-step{
+  display:flex;gap:10px;align-items:flex-start;
+  font-size:13px;color:var(--muted);line-height:1.5;
+}
+.step-num{
+  min-width:22px;height:22px;border-radius:50%;
+  background:var(--accent);color:white;
+  font-size:11px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;
+}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:24px;padding:10px 20px;font-size:13px;
+  font-weight:600;z-index:200;opacity:0;
+  transition:opacity 0.25s,transform 0.25s;
+  white-space:nowrap;pointer-events:none;
+  transform:translateX(-50%) translateY(8px);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{border-color:rgba(34,197,94,0.4);color:var(--success);}
+.toast.error{border-color:rgba(239,68,68,0.4);color:var(--danger);}
+.toast.info{border-color:rgba(59,130,246,0.4);color:var(--accent);}
+
+/* ── SETUP BANNER ── */
+.setup-banner{
+  margin:0 18px 14px;padding:12px 14px;
+  background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);
+  border-radius:var(--r);font-size:12px;color:var(--muted);line-height:1.5;
+}
+.setup-banner a{color:var(--accent2);text-decoration:none;}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ PAGE 1: LOGIN ═══════════════════ -->
+<div id="pg-login" class="page">
+  <div class="login-bg"></div>
+  <div class="login-wrap">
+    <div class="login-logo">
+      <div class="eyebrow">Sensing Local · Bengaluru</div>
+      <h1>Footpath<br><span>Profiler</span></h1>
+      <p>Field measurement tool for walkability audits</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input class="form-input" id="l-email" type="email" placeholder="you@sensinglocal.org" autocomplete="email" onblur="checkReturningSurveyor()">
+      <span class="form-hint">Used to match your calibration to your rows in the Measurements sheet</span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Phone Number</label>
+      <input class="form-input" id="l-phone" type="tel" placeholder="9876543210">
+    </div>
+
+    <div id="login-welcome-note" style="display:none;font-size:13px;color:var(--success);margin:-8px 0 -6px;"></div>
+
+    <div class="form-group" id="l-name-group">
+      <label class="form-label">Your Name</label>
+      <input class="form-input" id="l-name" type="text" placeholder="e.g. Ravi Kumar" autocomplete="name">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Phone Model</label>
+      <select class="form-select" id="l-model" onchange="modelChanged()">
+        <option value="">Select model…</option>
+        <option>iPhone 13</option>
+        <option>iPhone 14</option>
+        <option>iPhone 14 Pro</option>
+        <option>iPhone 15</option>
+        <option>iPhone 15 Pro</option>
+        <option>Samsung Galaxy S23</option>
+        <option>Samsung Galaxy S24</option>
+        <option>OnePlus 11</option>
+        <option>OnePlus 12</option>
+        <option>Pixel 7</option>
+        <option>Pixel 8</option>
+        <option>Redmi Note 13</option>
+        <option>iPhone 16</option>
+        <option>iPhone 16 Pro</option>
+        <option>Samsung Galaxy S25</option>
+        <option>OnePlus 13</option>
+        <option>Pixel 9</option>
+        <option>Redmi Note 13 Pro</option>
+        <option>Redmi Note 12</option>
+        <option>Poco X6</option>
+        <option>Poco F5</option>
+        <option>Realme 12 Pro</option>
+        <option>Vivo V30</option>
+        <option>iQOO Neo 9</option>
+        <option value="custom">Other (type below)</option>
+      </select>
+      <input class="form-input" id="l-model-custom" type="text"
+             placeholder="Enter your phone model" style="display:none;margin-top:8px;">
+    </div>
+
+    <button class="btn-primary" onclick="doLogin()">Start Surveying →</button>
+  </div>
+</div>
+
+<!-- ═══════════════════ PAGE 2: MAIN ═══════════════════ -->
+<div id="pg-main" class="page hidden">
+
+  <div class="main-hdr">
+    <div class="hdr-left">
+      <div class="hdr-brand">Sensing Local</div>
+      <div class="hdr-user" id="hdr-user-name">—</div>
+    </div>
+    <div class="hdr-actions">
+      <div class="icon-btn-sm" onclick="openSettingsModal()" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </div>
+      <div class="icon-btn-sm" id="btn-cal-hdr" onclick="openCalModal()" title="Calibrate">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+        </svg>
+      </div>
+      <div class="icon-btn-sm" id="btn-process-hdr" onclick="openProcessModal()" title="Process Measurements">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 2v6.34L4.2 19.5A1 1 0 0 0 5.13 21h13.74a1 1 0 0 0 .93-1.5L15 8.34V2M8.5 2h7M8 15h8"/>
+        </svg>
+      </div>
+      <div class="icon-btn-sm" onclick="doLogout()" title="Logout">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="setup-banner" class="setup-banner" style="display:none;">
+    ⚙️ <strong>Apps Script not configured.</strong> Images and data will save locally only.
+    <a href="#" onclick="openCalModal();return false;">Configure →</a>
+  </div>
+
+  <!-- Image canvas -->
+  <div class="vwrap" id="vwrap">
+    <svg id="svg" style="display:none;" xmlns="http://www.w3.org/2000/svg">
+      <g id="zoom-group">
+        <image id="simg"/>
+        <g id="g-grid"></g>
+        <path id="g-frame" fill="none" stroke="var(--yellow)" stroke-width="5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <g id="g-ui"></g>
+      </g>
+    </svg>
+    <div class="empty" id="empty">
+      <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+        <rect x="3" y="3" width="18" height="18" rx="3"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <path d="M21 15l-5-5L5 21"/>
+      </svg>
+      <div class="upload-btns">
+        <label class="upload-btn" for="fin-gal">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <path d="M21 15l-5-5L5 21"/>
+          </svg>
+          Gallery
+        </label>
+        <label class="upload-btn" for="fin-cam">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          Camera
+        </label>
+      </div>
+    </div>
+    <!-- Image loaded overlay controls -->
+    <div class="img-actions" id="img-actions" style="display:none;">
+      <div class="pill-btn" onclick="openReplaceMenu()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Replace
+      </div>
+    </div>
+    <!-- Zoom controls -->
+    <div style="position:absolute;bottom:10px;left:10px;pointer-events:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+      <div style="display:flex;gap:6px;">
+        <div onclick="zoomBy(1.4)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-weight:700;color:white;touch-action:manipulation;">+</div>
+        <div onclick="zoomBy(1/1.4)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-weight:700;color:white;touch-action:manipulation;">−</div>
+      </div>
+      <div id="zoom-reset" style="display:none;">
+        <div onclick="resetZoom()" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:5px 12px;font-size:11px;font-weight:700;color:white;cursor:pointer;display:flex;align-items:center;gap:5px;touch-action:manipulation;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <span id="zoom-label">1×</span>
+        </div>
+      </div>
+    </div>
+    <!-- Property line corner knob — faded until tapped to activate -->
+    <div id="prop-knob" style="display:none;position:absolute;top:10px;right:10px;pointer-events:auto;">
+      <div onclick="togglePropertyLine()" id="prop-knob-btn" style="
+        width:44px;height:44px;border-radius:50%;
+        background:rgba(168,85,247,0.18);
+        border:2px dashed rgba(168,85,247,0.45);
+        display:flex;align-items:center;justify-content:center;
+        cursor:pointer;touch-action:manipulation;
+        transition:background 0.2s,border 0.2s;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(168,85,247,0.7)" stroke-width="2.5">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </div>
+    </div>
+    <!-- Offset width display — shown only when property line is active -->
+    <div id="offset-badge" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);pointer-events:none;">
+      <div style="background:rgba(168,85,247,0.85);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;color:white;white-space:nowrap;">
+        Offset: <span id="offset-val">—</span> mm
+      </div>
+    </div>
+
+    <div class="ovr" id="ovr" style="display:none;">
+      <div class="icon-btn" onclick="swap()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+          <path d="M17 16v-2h-7v-2h7v-3l4 4-4 4zM7 11V9h7V7H7V4L3 8l4 4z"/>
+        </svg>
+      </div>
+      <div class="side-tag"><span id="side-lbl">R</span></div>
+    </div>
+
+    <!-- A4-sheet calibration panel (Method 2) — shown only while marking -->
+    <div id="a4-panel" style="display:none;position:absolute;bottom:10px;left:10px;right:10px;pointer-events:auto;z-index:6;">
+      <div style="background:rgba(12,18,32,0.92);backdrop-filter:blur(8px);border:1px solid rgba(232,121,249,0.4);border-radius:12px;padding:12px 14px;">
+        <div id="a4-panel-text" style="font-size:12px;color:#f0f4f8;margin-bottom:10px;line-height:1.4;">Tap one edge of the A4 sheet.</div>
+        <div id="a4-panel-choices" style="display:none;gap:8px;">
+          <button onclick="confirmA4(210)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation;">Short edge · 210mm</button>
+          <button onclick="confirmA4(297)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation;">Long edge · 297mm</button>
+        </div>
+        <button onclick="cancelA4Mode()" style="margin-top:8px;width:100%;background:transparent;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;border-radius:8px;padding:7px;font-size:11px;cursor:pointer;touch-action:manipulation;font-family:inherit;">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <p class="hint" id="hint" style="display:none;">👆 tap a knob to lock it · drag to move</p>
+
+  <!-- First-use calibration nudge -->
+  <div id="cal-nudge" style="display:none;margin:8px 18px 0;">
+    <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <span style="font-size:12px;color:#93b4d8;line-height:1.5;">📐 First time on <strong id="nudge-model" style="color:var(--text);">this phone</strong> — add a measurement to calibrate the grid scale.</span>
+      <button onclick="openCalModal()" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0;">Calibrate</button>
+    </div>
+  </div>
+
+  <!-- Measurement row -->
+  <div class="ftr">
+    <div class="ftr-r1">
+      <span class="flbl">Footpath width (mm)</span>
+      <div class="vpill"><span class="vval" id="w-val">—</span></div>
+    </div>
+    <!-- Manual measurement comparison row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:2px;padding:10px 0 6px;border-top:1px solid var(--border);">
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <span class="flbl">Tape measure (mm)</span>
+        <span style="font-size:10px;color:var(--muted);">optional — for calibration</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input id="manual-mm" type="number" placeholder="e.g. 1200"
+          style="width:110px;background:var(--surface);border:1.5px solid var(--border);
+          border-radius:10px;padding:8px 12px;color:var(--text);font-size:20px;
+          font-weight:800;font-family:monospace;text-align:right;outline:none;
+          -webkit-appearance:none;"
+          oninput="updateDiff()">
+        <div id="diff-badge" style="display:none;font-size:11px;font-weight:700;
+          padding:4px 10px;border-radius:20px;white-space:nowrap;"></div>
+      </div>
+    </div>
+
+    <!-- Offset measurement row — only visible when property line is active -->
+    <div id="offset-input-row" style="display:none;align-items:center;justify-content:space-between;margin-top:2px;padding:10px 0 6px;border-top:1px solid rgba(168,85,247,0.25);">
+      <div style="display:flex;flex-direction:column;gap:3px;">
+        <span style="font-size:13px;font-weight:500;color:rgba(168,85,247,0.9);">Offset width (mm)</span>
+        <span style="font-size:10px;color:var(--muted);">tape measure for offset gap</span>
+      </div>
+      <input id="manual-offset-mm" type="number" placeholder="e.g. 600"
+        style="width:110px;background:var(--surface);border:1.5px solid rgba(168,85,247,0.4);
+        border-radius:10px;padding:8px 12px;color:var(--text);font-size:20px;
+        font-weight:800;font-family:monospace;text-align:right;outline:none;
+        -webkit-appearance:none;">
+    </div>
+
+    <!-- Focal point section with title -->
+    <div style="margin-top:2px;padding:10px 0 0;border-top:1px solid var(--border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span class="flbl">Focal point</span>
+        <div class="cal-badge" id="cal-badge" onclick="openCalModal()">Scale: 1.00×</div>
+      </div>
+      <div class="ftr-r2">
+        <div style="display:grid;grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,36px);gap:4px;">
+          <div></div>
+          <button class="nbtn" onclick="nudgeVP(0,-4)" style="width:36px;height:36px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 5l-7 7h14z"/></svg>
+          </button>
+          <div></div>
+          <button class="nbtn" onclick="nudgeVP(-4,0)" style="width:36px;height:36px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M5 12l7-7v14z"/></svg>
+          </button>
+          <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#10b981;"></div>
+          </div>
+          <button class="nbtn" onclick="nudgeVP(4,0)" style="width:36px;height:36px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M19 12l-7-7v14z"/></svg>
+          </button>
+          <div></div>
+          <button class="nbtn" onclick="nudgeVP(0,4)" style="width:36px;height:36px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 19l7-7H5z"/></svg>
+          </button>
+          <div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Materials -->
+  <div class="mat-sec">
+    <div class="sec-lbl">Footpath Material</div>
+    <div class="mat-grid">
+      <div class="mat-item" id="mat-paver" onclick="toggleMat('paver')">
+        <div class="mat-thumb">
+          <svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" fill="#8b96a8"/>
+            <rect x="1" y="1" width="25" height="25" fill="#c8cdd6" rx="1.5"/>
+            <rect x="30" y="1" width="25" height="25" fill="#c8cdd6" rx="1.5"/>
+            <rect x="1" y="30" width="25" height="25" fill="#c8cdd6" rx="1.5"/>
+            <rect x="30" y="30" width="25" height="25" fill="#c8cdd6" rx="1.5"/>
+            <rect x="1" y="1" width="25" height="25" fill="none" stroke="#a0a8b4" stroke-width="0.5" rx="1.5"/>
+            <rect x="30" y="1" width="25" height="25" fill="none" stroke="#a0a8b4" stroke-width="0.5" rx="1.5"/>
+            <rect x="1" y="30" width="25" height="25" fill="none" stroke="#a0a8b4" stroke-width="0.5" rx="1.5"/>
+            <rect x="30" y="30" width="25" height="25" fill="none" stroke="#a0a8b4" stroke-width="0.5" rx="1.5"/>
+          </svg>
+        </div>
+        <span class="mat-name">Paver Blocks</span>
+      </div>
+      <div class="mat-item" id="mat-cement" onclick="toggleMat('cement')">
+        <div class="mat-thumb">
+          <svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" fill="#b8bec8"/>
+            <line x1="0" y1="14" x2="56" y2="14" stroke="#9ea6b4" stroke-width="0.8"/>
+            <line x1="0" y1="28" x2="56" y2="28" stroke="#9ea6b4" stroke-width="0.8"/>
+            <line x1="0" y1="42" x2="56" y2="42" stroke="#9ea6b4" stroke-width="0.8"/>
+            <line x1="14" y1="0" x2="14" y2="56" stroke="#9ea6b4" stroke-width="0.8"/>
+            <line x1="28" y1="0" x2="28" y2="56" stroke="#9ea6b4" stroke-width="0.8"/>
+            <line x1="42" y1="0" x2="42" y2="56" stroke="#9ea6b4" stroke-width="0.8"/>
+            <rect x="8" y="3" width="12" height="8" rx="1" fill="#cdd2da" opacity="0.5"/>
+            <rect x="34" y="20" width="16" height="6" rx="1" fill="#cdd2da" opacity="0.4"/>
+          </svg>
+        </div>
+        <span class="mat-name">Cement</span>
+      </div>
+      <div class="mat-item" id="mat-mud" onclick="toggleMat('mud')">
+        <div class="mat-thumb">
+          <svg width="56" height="56" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+            <rect width="56" height="56" fill="#8b6040"/>
+            <ellipse cx="14" cy="18" rx="10" ry="5" fill="#6b4828" opacity="0.6"/>
+            <ellipse cx="38" cy="38" rx="12" ry="6" fill="#6b4828" opacity="0.55"/>
+            <ellipse cx="30" cy="10" rx="7" ry="3.5" fill="#a07050" opacity="0.5"/>
+            <ellipse cx="8" cy="44" rx="6" ry="3" fill="#6b4828" opacity="0.45"/>
+            <ellipse cx="48" cy="20" rx="5" ry="2.5" fill="#a07050" opacity="0.4"/>
+          </svg>
+        </div>
+        <span class="mat-name">Mud / Earth</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submit -->
+  <div class="submit-sec">
+    <button class="btn-submit" id="btn-submit" onclick="submitRecord()">SUBMIT</button>
+    <div class="status-msg" id="status-msg"></div>
+    <div id="img-download-sec" style="display:none;padding:6px 0 0;"></div>
+  </div>
+
+  <!-- Records table -->
+  <div class="recsec" id="recsec">
+    <div class="rechead">
+      <span class="recttl">Saved measurements</span>
+      <button class="expbtn" onclick="exportCSV()">Export CSV</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>#</th><th>Side</th><th>mm</th><th>Material</th><th>Grade</th><th>Time</th></tr>
+      </thead>
+      <tbody id="rec-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════ CALIBRATION MODAL ═══════════════════ -->
+<div class="modal-overlay" id="cal-modal" style="display:none;" onclick="closeCalModal(event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Calibrate</div>
+    <div class="modal-sub">Adjust measurement scale for your phone and camera height.</div>
+
+    <div class="info-card" id="cal-info-card">
+      <strong>Phone:</strong> <span id="cal-phone-lbl">—</span><br>
+      <strong>Current scale:</strong> <span id="cal-scale-lbl">1.000×</span><br>
+      <strong>Camera height:</strong> <span id="cal-eyeh-lbl">1200 mm</span>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+      <label class="form-label">Your Height (cm)</label>
+      <div style="display:flex;gap:8px;">
+        <input class="form-input" id="cal-height-input" type="number" placeholder="e.g. 170" style="flex:1;">
+        <button class="btn-secondary" style="flex:0 0 auto;padding:0 16px;" onclick="estimateEyeHFromHeight()">Estimate</button>
+      </div>
+      <span class="form-hint">Most people shoot at chest/elbow height, not eye level — this fills in a starting camera height below, which you can still fine-tune with either method.</span>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px;">
+      <label class="form-label">Camera Height (mm)</label>
+      <input class="form-input" id="cal-eyeh-input" type="number" placeholder="1200" value="1200">
+      <span class="form-hint">Auto-filled from your height above — adjust if your shooting height differs</span>
+    </div>
+
+    <div class="divider" style="margin-bottom:14px;">Calibrate footpath scale</div>
+    <div class="form-hint" style="margin-bottom:10px;display:block;">Choose how to set the scale for this phone:</div>
+
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;">
+      <button class="btn-secondary" style="width:100%;text-align:left;padding:14px;" onclick="chooseCalMethod(1)">
+        <strong style="display:block;font-size:13px;color:var(--text);margin-bottom:2px;">1 · I know the exact footpath width</strong>
+        <span style="font-size:11px;color:var(--muted);">Type in a measurement you've taken with a tape</span>
+      </button>
+      <button class="btn-secondary" style="width:100%;text-align:left;padding:14px;" onclick="chooseCalMethod(2)">
+        <strong style="display:block;font-size:13px;color:var(--text);margin-bottom:2px;">2 · Place an A4 sheet on the footpath</strong>
+        <span style="font-size:11px;color:var(--muted);">No measuring — just tap the sheet's edges in the photo</span>
+      </button>
+    </div>
+
+    <div id="cal-method1-panel" style="display:none;">
+      <div class="cal-steps" style="margin-top:10px;">
+        <div class="cal-step"><div class="step-num">1</div>Position the Building edge and Kerb edge lines exactly on the width you measured</div>
+        <div class="cal-step"><div class="step-num">2</div>Enter that width below and tap Apply Calibration</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Known Reference Width (mm)</label>
+        <input class="form-input" id="cal-ref-input" type="number" placeholder="e.g. 600">
+        <span class="form-hint">Leave blank to update camera height only</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="chooseCalMethod(0)">Back</button>
+        <button class="btn-primary" style="flex:1;" onclick="doCalibrate()">Apply Calibration</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeCalModal()">Close</button>
+      <button class="btn-secondary btn-danger" style="flex:1;" onclick="resetCal()">Reset to Default</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeCalModal();openGuideModal();" style="width:100%;">📋 Field Guide</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ A4 CALIBRATION INSTRUCTIONS MODAL ═══════════ -->
+<div class="modal-overlay" id="a4-instructions-modal" style="display:none;" onclick="closeModal('a4-instructions-modal',event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Calibrate with A4 Paper</div>
+    <div class="modal-sub">Quick setup — no tape measure needed.</div>
+
+    <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);margin-bottom:16px;">
+      <svg viewBox="0 0 300 200" width="100%" style="max-width:260px;display:block;margin:0 auto;">
+        <polygon points="20,190 280,190 175,68 125,68" fill="#101a2c" stroke="#253449" stroke-width="1"/>
+        <line x1="20" y1="190" x2="125" y2="68" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+        <line x1="280" y1="190" x2="175" y2="68" stroke="#2dd4bf" stroke-width="3" stroke-linecap="round"/>
+        <rect x="93" y="116" width="114" height="26" rx="2" fill="#f8fafc" stroke="#e879f9" stroke-width="2.5"/>
+        <text x="150" y="134" font-size="12" font-weight="800" fill="#0c1220" text-anchor="middle">A4</text>
+        <rect x="131" y="150" width="38" height="62" rx="7" fill="#162032" stroke="#f0f4f8" stroke-width="2"/>
+        <rect x="139" y="157" width="22" height="43" rx="2" fill="#060d1a"/>
+        <circle cx="150" cy="204" r="2.5" fill="#6b84a0"/>
+        <line x1="150" y1="150" x2="150" y2="118" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3"/>
+      </svg>
+    </div>
+
+    <div class="cal-steps">
+      <div class="cal-step"><div class="step-num">1</div>Turn your phone to <strong style="color:var(--text);">portrait</strong> orientation — the app's perspective math assumes a portrait photo.</div>
+      <div class="cal-step"><div class="step-num">2</div>Lay a sheet of A4 paper flat on the ground, <strong style="color:var(--text);">across the footpath</strong> (perpendicular to the direction you're walking), roughly in the lower-middle of the frame.</div>
+      <div class="cal-step"><div class="step-num">3</div>Take the photo with both edges of the sheet clearly visible, then tap "Start Marking" and tap the sheet's two edges directly on the photo.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('a4-instructions-modal');openCalModal();">Back</button>
+      <button class="btn-primary" style="flex:1;" onclick="closeModal('a4-instructions-modal');startA4Mode();">Start Marking →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PROCESS MEASUREMENTS MODAL ═══════════ -->
+<div class="modal-overlay" id="process-modal" style="display:none;" onclick="closeModal('process-modal',event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh;overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Process Measurements</div>
+    <div class="modal-sub">Reads the 'Measurements' sheet, detects the neon-green road-edge and pink building-edge lines in each annotated image, and computes <strong style="color:var(--text);">footpath_width_by_model</strong> using that surveyor's saved calibration.</div>
+
+    <div class="info-card">
+      Needs: signed in with Google (⚙ Settings — for reading images from Drive), and each surveyor must have calibrated at least once in this app so their scale is on file.
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('process-modal')">Close</button>
+      <button class="btn-primary" style="flex:1;" onclick="runMeasurementsProcessing()">Run</button>
+    </div>
+
+    <div id="process-log" style="margin-top:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px;max-height:260px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.6;"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════ REPLACE MENU MODAL ═══════════════════ -->
+<div class="modal-overlay" id="replace-modal" style="display:none;" onclick="closeReplaceModal(event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="padding-bottom:28px;">
+    <div class="modal-handle"></div>
+    <div class="modal-title" style="margin-bottom:16px;">Replace Photo</div>
+    <div class="modal-actions">
+      <label class="btn-secondary" for="fin-gal" style="text-align:center;cursor:pointer;" onclick="closeReplaceModal()">
+        📷 Choose from Gallery
+      </label>
+      <label class="btn-secondary" for="fin-cam" style="text-align:center;cursor:pointer;" onclick="closeReplaceModal()">
+        📸 Take New Photo
+      </label>
+    </div>
+    <div class="modal-actions" style="margin-top:8px;">
+      <button class="btn-secondary" onclick="closeReplaceModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SETTINGS MODAL ═══════════ -->
+<div class="modal-overlay" id="settings-modal" style="display:none;" onclick="closeModal('settings-modal',event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Settings</div>
+
+    <div style="margin-bottom:14px;">
+      <div class="sec-lbl" style="margin-bottom:8px;">Google OAuth Client ID <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(for image upload)</span></div>
+      <input class="form-input" id="client-id-input" type="text"
+             placeholder="xxxxxx.apps.googleusercontent.com"
+             style="font-size:12px;">
+      <span class="form-hint">From Google Cloud Console → Credentials → OAuth 2.0 Client ID.</span>
+    </div>
+
+    <div style="margin-bottom:14px;">
+      <div class="sec-lbl" style="margin-bottom:8px;">Google Apps Script URL <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(sheet data)</span></div>
+      <input class="form-input" id="script-url-input" type="url"
+             placeholder="https://script.google.com/macros/s/…/exec"
+             style="font-size:12px;">
+      <span class="form-hint">Logs measurement rows to your Google Sheet.</span>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <div class="sec-lbl" style="margin-bottom:8px;">Image Server URL <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(Drive photos)</span></div>
+      <input class="form-input" id="image-server-input" type="url"
+             placeholder="https://your-app.onrender.com"
+             style="font-size:12px;">
+      <span class="form-hint">Render proxy server that uploads images to Drive. See SETUP.md.</span>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <div class="sec-lbl" style="margin-bottom:8px;">Google Account <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(for image upload)</span></div>
+      <div id="google-auth-status" style="font-size:12px;color:var(--muted);margin-bottom:8px;">Not signed in — sign in with Google in Settings</div>
+      <button onclick="signInWithGoogle()" id="google-signin-btn" style="
+        background:#4285f4;color:white;border:none;border-radius:8px;
+        padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;
+        font-family:inherit;display:flex;align-items:center;gap:8px;width:100%;
+        justify-content:center;touch-action:manipulation;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        Sign in with Google
+      </button>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <div class="sec-lbl" style="margin-bottom:8px;">Admin Email <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(Process Measurements access)</span></div>
+      <input class="form-input" id="admin-email-input" type="email"
+             placeholder="you@sensinglocal.org"
+             style="font-size:12px;">
+      <span class="form-hint">Only this email sees the Process Measurements button. Leave blank to allow anyone signed in — not recommended. This is a UI-level restriction only, not real backend security.</span>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:18px;">
+      <button class="btn-secondary" onclick="testConnection()" style="flex:1;">Test</button>
+      <button class="btn-primary" style="flex:1;" onclick="saveScriptUrl()">Save Both</button>
+    </div>
+
+    <div id="conn-status" style="font-size:12px;color:var(--muted);text-align:center;min-height:16px;margin-bottom:18px;"></div>
+
+    <div style="background:var(--surface);border-radius:var(--r);border:1px solid var(--border);padding:14px;">
+      <div class="sec-lbl" style="margin-bottom:10px;">Setup Steps</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.9;">
+        1. Open the <a href="https://docs.google.com/spreadsheets/d/1j3QSZFLKX4ADH0I80fic6P9p2fy8zs1nTd3Ip7iXHeg" target="_blank" style="color:var(--accent);">Google Sheet</a><br>
+        2. Extensions → Apps Script<br>
+        3. Paste the <strong style="color:var(--text);">apps_script.gs</strong> code and delete any existing code<br>
+        4. Deploy → New Deployment → Web App<br>
+        &nbsp;&nbsp;&nbsp;Execute as: <strong style="color:var(--text);">Me</strong> · Access: <strong style="color:var(--text);">Anyone</strong><br>
+        5. Copy the URL → paste above → Save
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-secondary" onclick="closeModal('settings-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ CALIBRATION GUIDE MODAL ═══════════ -->
+<div class="modal-overlay" id="cal-guide-modal" style="display:none;" onclick="closeModal('cal-guide-modal',event)">
+  <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:85vh;overflow-y:auto;">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Field Calibration Guide</div>
+    <div class="modal-sub">Validate and tune measurement accuracy against a tape measure.</div>
+
+    <div style="display:flex;flex-direction:column;gap:12px;">
+
+      <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Step 1 — Find a reference</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;">Pick something with a <strong style="color:var(--text);">known real-world width</strong> at the base of your photo frame — a standard floor tile (300 mm or 600 mm), a road marking, or a kerb section you've measured with tape. Or skip the tape measure entirely: lay a sheet of <strong style="color:var(--text);">A4 paper</strong> flat on the ground and use "Method 2" in the calibration screen to tap its edges directly.</div>
+      </div>
+
+      <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Step 2 — Set the lines</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;">Position the <strong style="color:var(--building);">Building edge</strong> and <strong style="color:var(--kerb);">Kerb edge</strong> lines so they align exactly with the edges of your reference object at the bottom of the frame. Lock both.</div>
+      </div>
+
+      <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Step 3 — Calibrate</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;">Tap the <strong style="color:var(--text);">Scale badge</strong> → enter the actual width of your reference → tap <strong style="color:var(--text);">Apply Calibration</strong>. The scale factor updates and is saved for your phone model.</div>
+      </div>
+
+      <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Expected accuracy</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;">After one calibration, expect <strong style="color:var(--text);">±5–15%</strong> accuracy on level footpaths in good light. Accuracy improves when the footpath fills the lower half of the frame and lines are locked at the bottom edge.</div>
+      </div>
+
+      <div style="background:rgba(245,158,11,0.08);border-radius:var(--r);padding:14px;border:1px solid rgba(245,158,11,0.25);">
+        <div style="font-size:11px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Tips for best results</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.7;">
+          • Hold phone at consistent height (elbow height, ~1.2 m)<br>
+          • Point camera straight ahead, not angled down<br>
+          • Both edges of the footpath should be visible<br>
+          • Lock the focal point once set for a survey session<br>
+          • Zoom in to align lines precisely at the bottom of frame
+        </div>
+      </div>
+
+    </div>
+
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-secondary" onclick="closeModal('cal-guide-modal')">Got it</button>
+      <button class="btn-primary" style="flex:1;" onclick="closeModal('cal-guide-modal');openCalModal();">Calibrate Now →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="fin-gal" accept="image/*" style="display:none;" onchange="loadFile(event)">
+<input type="file" id="fin-cam" accept="image/*" capture="environment" style="display:none;" onchange="loadFile(event)">
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────────
+// After deploying your Apps Script, paste the web app URL here:
+var DRIVE_FOLDER_ID  = '1TJ3DiFYcMVRyX58CAh0LN5ZlEhyvXQXX';
+var GOOGLE_CLIENT_ID = localStorage.getItem('fp_google_client_id') || '969584887609-3ou0o02hdjscm428bld60i0ed942c10p.apps.googleusercontent.com';
+var gAccessToken     = null; // set after OAuth login
+var SHEET_ID        = '1j3QSZFLKX4ADH0I80fic6P9p2fy8zs1nTd3Ip7iXHeg';
+// Loaded from localStorage so user can configure in-app
+var APPS_SCRIPT_URL    = localStorage.getItem('fp_script_url')    || 'https://script.google.com/macros/s/AKfycbyvs0EEYQO4IYcA9apJf7eVuscT7fIIz9Wmn6GHXaZsxMdwLmgcHwNW_SuodNBdNSt3kQ/exec';
+var IMAGE_SERVER_URL   = localStorage.getItem('fp_image_server_url') || '';
+var ADMIN_EMAIL         = localStorage.getItem('fp_admin_email') || '';
+
+// ─── USER & APP STATE ──────────────────────────────────────────────────────────
+var U = {};
+var S = {
+  W:0, H:0,
+  vp:{ x:0, y:0, locked:false },
+  wBx:0, kBx:0, wZY:0, kMY:0,
+  wLocked:false, kLocked:false,
+  // Property line (building offset) — activated by tapping corner knob
+  pActive:false, pBx:0, pZY:0, pLocked:false, pLockedExit:null, pLockedBx:null, pLockedZY:null,
+  eyeH:1200, scaleFactor:1.0, focal:0,
+  drag:null, _lp:{x:0,y:0}, startP:{x:0,y:0}, moved:false,
+  // A4-sheet calibration mode (Method 2) — two tapped points on the sheet's edges
+  aMode:false, aPts:[],
+  recs:[], imgLoaded:false,
+  rawImgB64:null, imgMimeType:'image/jpeg',
+  selMats:new Set(),
+  lat:null, lng:null
+};
+
+// ─── LOGIN ─────────────────────────────────────────────────────────────────────
+function modelChanged() {
+  var sel = document.getElementById('l-model').value;
+  document.getElementById('l-model-custom').style.display = sel==='custom' ? 'block' : 'none';
+}
+
+var _knownName = null; // set by checkReturningSurveyor() when this email is already on file
+
+function doLogin() {
+  var name  = _knownName || document.getElementById('l-name').value.trim();
+  var phone = document.getElementById('l-phone').value.trim();
+  var email = document.getElementById('l-email').value.trim();
+  var model = document.getElementById('l-model').value;
+  if (model === 'custom') model = document.getElementById('l-model-custom').value.trim();
+
+
+  if (!name)  { showToast('Enter your name','error'); return; }
+  if (!phone) { showToast('Enter phone number','error'); return; }
+  if (!email || email.indexOf('@') === -1) { showToast('Enter a valid email','error'); return; }
+  if (!model) { showToast('Select phone model','error'); return; }
+
+  U = { name, phone, email, model, eyeH: 1200 };
+  localStorage.setItem('fp_user', JSON.stringify(U));
+  syncSurveyorProfile({ name: name, phone: phone });
+  startMain();
+}
+
+// Fired on the Email field's blur during login. If this email already has a
+// name on file (from a previous login, possibly on a different device), skip
+// re-asking for it — just show a welcome-back note and hide the Name field.
+// Fails silently and shows the Name field as normal if the lookup can't run
+// (offline, no Apps Script configured, brand-new surveyor).
+function checkReturningSurveyor() {
+  var email = document.getElementById('l-email').value.trim();
+  var nameGroup = document.getElementById('l-name-group');
+  var note = document.getElementById('login-welcome-note');
+  _knownName = null;
+  note.style.display = 'none';
+  nameGroup.style.display = 'block';
+  if (!email || email.indexOf('@') === -1 || !APPS_SCRIPT_URL) return;
+
+  postToScript({ action:'getHeight', surveyor: email })
+    .then(function(d) {
+      if (d && d.name) {
+        _knownName = d.name;
+        nameGroup.style.display = 'none';
+        note.style.display = 'block';
+        note.textContent = 'Welcome back, ' + d.name + '!';
+        if (d.phone && !document.getElementById('l-phone').value) {
+          document.getElementById('l-phone').value = d.phone;
+        }
+      }
+    })
+    .catch(function() { /* non-fatal — just show the Name field */ });
+}
+
+function doLogout() {
+  if (!confirm('Log out?')) return;
+  localStorage.removeItem('fp_user');
+  showPage('pg-login');
+}
+
+function startMain() {
+  showPage('pg-main');
+  document.getElementById('hdr-user-name').textContent = U.name;
+  updateProcessButtonVisibility();
+
+  // Load calibration for this phone model
+  var cal = JSON.parse(localStorage.getItem('fp_cal_' + U.model) || '{}');
+  S.eyeH        = cal.eyeH        || U.eyeH || 1200;
+  S.scaleFactor = cal.scaleFactor || 1.0;
+  updateCalBadge();
+
+  // Show first-use calibration nudge
+  var isFirstUse = !localStorage.getItem("fp_cal_" + U.model);
+  var nudge = document.getElementById("cal-nudge");
+  nudge.style.display = isFirstUse ? "block" : "none";
+  if (isFirstUse) document.getElementById("nudge-model").textContent = U.model;
+
+  // Show setup banner if no Apps Script configured
+  document.getElementById('setup-banner').style.display =
+    (!APPS_SCRIPT_URL) ? 'block' : 'none';
+
+  // Height (for the camera-height estimate) may already be on file for this
+  // email from a previous device/session — fetch it if we don't have it locally
+  fetchHeightIfMissing();
+
+  // Geolocation
+  refreshGeo();
+}
+
+function showPage(id) {
+  ['pg-login','pg-main'].forEach(function(p) {
+    document.getElementById(p).classList.toggle('hidden', p !== id);
+  });
+}
+
+// ─── GEOLOCATION ───────────────────────────────────────────────────────────────
+function refreshGeo() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    S.lat = pos.coords.latitude.toFixed(6);
+    S.lng = pos.coords.longitude.toFixed(6);
+  }, function() {});
+}
+
+// ─── FILE LOADING ──────────────────────────────────────────────────────────────
+function loadFile(e) {
+  var f = e.target.files[0]; if (!f) return;
+  S.imgMimeType = f.type || 'image/jpeg';
+
+  var url = URL.createObjectURL(f);
+  var im = new Image();
+  im.onload = function() {
+    // Compress to max 1200px at load time so rawImgB64 is always small enough to store
+    var MAX = 1200, Q = 0.82;
+    var w = im.naturalWidth, h = im.naturalHeight;
+    if (w > MAX || h > MAX) {
+      if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+      else       { w = Math.round(w * MAX / h); h = MAX; }
+    }
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').drawImage(im, 0, 0, w, h);
+    S.rawImgB64 = c.toDataURL('image/jpeg', Q);
+    S.imgMimeType = 'image/jpeg';
+    console.log('[FP] Image stored, size:', S.rawImgB64.length);
+      var wrap = document.getElementById('vwrap');
+      S.W = wrap.clientWidth;
+      S.H = Math.floor(S.W * im.naturalHeight / im.naturalWidth);
+      wrap.style.height = S.H + 'px';
+
+      S.focal = S.W / (2 * Math.tan(28 * Math.PI / 180));
+
+      // LOCK RULE: reset zero (w) and kerb (k), preserve VP if locked
+      if (!S.vp.locked) {
+        S.vp = { x: S.W * 0.50, y: S.H * 0.28, locked: false };
+      }
+      S.wZY = S.H * 0.55; S.kMY = S.H * 0.78;
+      S.wBx = S.W * 0.82; S.kBx = S.W * 0.18;
+      // Apply fence so initial handles are within frame
+      S.wBx = clampBx(S.wBx, S.wZY);
+      S.kBx = clampBx(S.kBx, S.kMY);
+      S.wLocked = false; S.kLocked = false;
+      // Reset property line — stays inactive for each new image
+      S.pActive = false; S.pLocked = false; S.pLockedExit = null; S.pLockedBx = null; S.pLockedZY = null;
+      S.pBx = S.W * 0.5; S.pZY = S.H * 0.4; // default position (top-centre)
+
+      var svg = document.getElementById('svg');
+      svg.setAttribute('viewBox', '0 0 ' + S.W + ' ' + S.H);
+      var si = document.getElementById('simg');
+      si.setAttribute('href', url);
+      si.setAttribute('width',  S.W);
+      si.setAttribute('height', S.H);
+
+      document.getElementById('empty').style.display        = 'none';
+      document.getElementById('img-actions').style.display  = 'block';
+      document.getElementById('ovr').style.display          = 'flex';
+      document.getElementById('hint').style.display         = 'block';
+      document.getElementById('prop-knob').style.display    = 'block';
+      svg.style.display = 'block';
+      S.imgLoaded = true;
+      hideDownloadBanner();
+      Z = {scale:1,tx:0,ty:0}; applyZoom();
+
+      svg.removeEventListener('pointerdown',  onPD);
+      svg.removeEventListener('pointermove',  onPM);
+      svg.removeEventListener('pointerup',    onPU);
+      svg.removeEventListener('pointercancel',onPU);
+      svg.addEventListener('pointerdown',  onPD, { passive:true  });
+      svg.addEventListener('pointermove',  onPM, { passive:false });
+      svg.addEventListener('pointerup',    onPU, { passive:true  });
+      svg.addEventListener('pointercancel',onPU, { passive:true  });
+      redraw();
+      e.target.value = '';
+  };
+  im.src = url;
+}
+
+function openReplaceMenu()  { document.getElementById('replace-modal').style.display='flex'; }
+function closeReplaceModal(e) {
+  if (!e || e.target===document.getElementById('replace-modal'))
+    document.getElementById('replace-modal').style.display='none';
+}
+
+// ─── PROPERTY LINE GEOMETRY ───────────────────────────────────────────────────
+function offsetMMRaw() {
+  // Distance between property line and building edge line, measured at building edge y
+  var pXc = lineX(S.pBx, S.wZY), wXc = lineX(S.wBx, S.wZY);
+  return Math.abs(toWorldMM(pXc, S.wZY) - toWorldMM(wXc, S.wZY));
+}
+function offsetMM() {
+  return S.pActive ? Math.round(offsetMMRaw() * S.scaleFactor) : null;
+}
+
+// ─── GEOMETRY ──────────────────────────────────────────────────────────────────
+function lineX(bx, y) {
+  var d = S.H - S.vp.y;
+  return d ? S.vp.x + (bx - S.vp.x) * (y - S.vp.y) / d : bx;
+}
+function toWorldMM(sx, sy) {
+  return sy <= S.vp.y ? 0 : (sx - S.vp.x) * (S.eyeH / (sy - S.vp.y));
+}
+function widthMMRaw() {
+  var wXc = lineX(S.wBx, S.kMY), kXc = lineX(S.kBx, S.kMY);
+  return Math.abs(toWorldMM(wXc, S.kMY) - toWorldMM(kXc, S.kMY));
+}
+function widthMM() {
+  return Math.round(widthMMRaw() * S.scaleFactor);
+}
+// Inverse of lineX: given an arbitrary tapped point (x,y), find the
+// "Bx" value (the x-intercept this same perspective ray would have at
+// the bottom of the frame) so it can be projected to any other row
+// with lineX() exactly like the building/kerb markers are.
+function bxFromXY(x, y) {
+  var d = y - S.vp.y;
+  return d ? S.vp.x + (x - S.vp.x) * (S.H - S.vp.y) / d : x;
+}
+// Raw (pre-scaleFactor) ground-plane distance between the two tapped
+// A4-sheet points, evaluated at their shared row — used by Method 2
+// calibration exactly the way widthMMRaw() is used by Method 1.
+function a4RawWidthAt(y) {
+  var x1 = lineX(bxFromXY(S.aPts[0].x, S.aPts[0].y), y);
+  var x2 = lineX(bxFromXY(S.aPts[1].x, S.aPts[1].y), y);
+  return Math.abs(toWorldMM(x1, y) - toWorldMM(x2, y));
+}
+function exitPoint(bx) {
+  var sl = (bx - S.vp.x) / (S.H - S.vp.y);
+  var tx = S.vp.x + sl*(S.H - S.vp.y), ty = S.H;
+  if      (tx > S.W) { tx = S.W; ty = S.vp.y + (S.W - S.vp.x) / sl; }
+  else if (tx < 0)   { tx = 0;   ty = S.vp.y + (0   - S.vp.x) / sl; }
+  return { x:tx, y:ty };
+}
+function framePath(p0, p1) {
+  var W=S.W,H=S.H;
+  var oR=function(p){return p.x>W-2;}, oL=function(p){return p.x<2;}, oB=function(p){return p.y>H-2;};
+  var d='M '+p0.x.toFixed(1)+' '+p0.y.toFixed(1);
+  if(oB(p0)&&oB(p1)){d+=' L '+p1.x.toFixed(1)+' '+H;return d;}
+  if     (oR(p0)){d+=' L '+W+' '+H;if(!oB(p1))d+=' L 0 '+H;}
+  else if(oL(p0)){d+=' L 0 '+H;   if(!oB(p1))d+=' L '+W+' '+H;}
+  else{if(oR(p1))d+=' L '+W+' '+H;else if(oL(p1))d+=' L 0 '+H;}
+  d+=' L '+p1.x.toFixed(1)+' '+p1.y.toFixed(1);
+  return d;
+}
+
+// ─── FENCE HELPER ─────────────────────────────────────────────────────────────
+// Clamp bx so the rendered handle at (bx,y) stays within [pad, W-pad]
+var FENCE = 28; // px padding from edge (roughly handle radius)
+function clampBx(bx, y) {
+  if (y <= S.vp.y) return bx;
+  var ratio = (S.H - S.vp.y) / (y - S.vp.y);
+  var minBx = S.vp.x + (FENCE - S.vp.x) * ratio;
+  var maxBx = S.vp.x + (S.W - FENCE - S.vp.x) * ratio;
+  if (minBx > maxBx) { var tmp=minBx; minBx=maxBx; maxBx=tmp; }
+  return Math.max(minBx, Math.min(maxBx, bx));
+}
+
+// ─── ZOOM STATE ────────────────────────────────────────────────────────────────
+var Z = { scale:1, tx:0, ty:0 };
+var _ptrs = {};   // active pointers: pointerId → raw SVG coords
+var _pinch0 = null;
+
+function svgRaw(e) {
+  var r = document.getElementById('svg').getBoundingClientRect();
+  return {
+    x: (e.clientX - r.left) / r.width  * S.W,
+    y: (e.clientY - r.top)  / r.height * S.H
+  };
+}
+function toContent(raw) {
+  return { x: (raw.x - Z.tx) / Z.scale, y: (raw.y - Z.ty) / Z.scale };
+}
+function getXY(e) { return toContent(svgRaw(e)); }
+
+function clampZoom() {
+  Z.tx = Math.max(S.W*(1-Z.scale), Math.min(0, Z.tx));
+  Z.ty = Math.max(S.H*(1-Z.scale), Math.min(0, Z.ty));
+}
+function applyZoom() {
+  var zg = document.getElementById('zoom-group');
+  if (zg) zg.setAttribute('transform',
+    'translate('+Z.tx.toFixed(1)+','+Z.ty.toFixed(1)+') scale('+Z.scale.toFixed(3)+')');
+  var zr = document.getElementById('zoom-reset');
+  if (zr) {
+    var isZ = Z.scale > 1.05;
+    zr.style.display = isZ ? 'block' : 'none';
+    var zl = document.getElementById('zoom-label');
+    if (zl && isZ) zl.textContent = Z.scale.toFixed(1)+'×';
+  }
+  // Re-render UI elements so counter-scale (isc) reflects new zoom level
+  if (S.imgLoaded) redraw();
+}
+function resetZoom() { Z={scale:1,tx:0,ty:0}; applyZoom(); }
+function zoomBy(factor) {
+  if (!S.W) return;
+  var ns = Math.max(1, Math.min(6, Z.scale * factor));
+  // Zoom toward center of image
+  var cx = S.W/2, cy = S.H/2;
+  Z.tx = cx - (cx - Z.tx) * ns / Z.scale;
+  Z.ty = cy - (cy - Z.ty) * ns / Z.scale;
+  Z.scale = ns;
+  clampZoom(); applyZoom();
+}
+
+function pDist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+function pMid(a,b) { return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+
+// ─── POINTER EVENTS ────────────────────────────────────────────────────────────
+function onPD(e) {
+  var raw = svgRaw(e);
+  _ptrs[e.pointerId] = raw;
+  var ids = Object.keys(_ptrs);
+
+  if (ids.length >= 2) {
+    // Two fingers — start pinch, cancel any handle drag
+    S.drag = null;
+    var pa=_ptrs[ids[0]], pb=_ptrs[ids[1]];
+    _pinch0 = { dist:pDist(pa,pb), mid:pMid(pa,pb), Z:{scale:Z.scale,tx:Z.tx,ty:Z.ty} };
+    return;
+  }
+
+  // A4 calibration mode — plain tap-to-place, bypasses handle dragging entirely
+  if (S.aMode) {
+    placeA4Point(toContent(raw));
+    return;
+  }
+
+  // Single finger — hit-test in content coords
+  var p = toContent(raw);
+  S.startP = {x:p.x,y:p.y}; S.moved = false; S._t = Date.now();
+  var wXz=lineX(S.wBx,S.wZY), kXm=lineX(S.kBx,S.kMY);
+  var p0=exitPoint(S.wBx), p1=exitPoint(S.kBx);
+  var hr = 1/Z.scale; // scale hit radius with zoom
+
+  var pXz = S.pActive ? lineX(S.pBx, S.pZY) : -9999;
+  var pExit = S.pActive ? exitPoint(S.pBx) : {x:-9999,y:-9999};
+  if     (Math.hypot(p.x-S.vp.x,p.y-S.vp.y) < 50*hr)                      S.drag='vp';
+  else if(Math.hypot(p.x-wXz,   p.y-S.wZY)   < 70*hr)                      S.drag='w';
+  else if(Math.hypot(p.x-kXm,   p.y-S.kMY)   < 70*hr)                      S.drag='k';
+  else if(S.pActive && Math.hypot(p.x-pXz,   p.y-S.pZY)   < 70*hr)         S.drag='p';
+  else if(S.wLocked && Math.hypot(p.x-p0.x,  p.y-p0.y)    < 40*hr)         S.drag='w';
+  else if(S.kLocked && Math.hypot(p.x-p1.x,  p.y-p1.y)    < 40*hr)         S.drag='k';
+  else if(S.pActive && S.pLocked && Math.hypot(p.x-pExit.x,p.y-pExit.y) < 40*hr) S.drag='p';
+  else                                                                         S.drag = Z.scale>1.05 ? 'pan' : null;
+
+  if (!S.drag) return;
+  try { e.target.setPointerCapture(e.pointerId); } catch(ex) {}
+  S._lp = p; S._rawLp = raw;
+}
+
+function onPM(e) {
+  var raw = svgRaw(e);
+  _ptrs[e.pointerId] = raw;
+  var ids = Object.keys(_ptrs);
+
+  // ── Pinch zoom ──
+  if (ids.length >= 2 && _pinch0) {
+    e.preventDefault();
+    var pa=_ptrs[ids[0]], pb=_ptrs[ids[1]];
+    var dist=pDist(pa,pb), mid=pMid(pa,pb);
+    var ns = Math.max(1, Math.min(6, _pinch0.Z.scale * dist / _pinch0.dist));
+    var cx = (_pinch0.mid.x - _pinch0.Z.tx) / _pinch0.Z.scale;
+    var cy = (_pinch0.mid.y - _pinch0.Z.ty) / _pinch0.Z.scale;
+    Z.scale=ns; Z.tx=mid.x-cx*ns; Z.ty=mid.y-cy*ns;
+    clampZoom(); applyZoom();
+    return;
+  }
+
+  if (!S.drag) return;
+  var p = toContent(raw);
+  var dx=p.x-S._lp.x, dy=p.y-S._lp.y;
+  if (!S.moved && Math.hypot(p.x-S.startP.x,p.y-S.startP.y)>14) S.moved=true;
+
+  // ── Pan when zoomed ──
+  if (S.drag==='pan') {
+    e.preventDefault();
+    Z.tx += raw.x - S._rawLp.x;
+    Z.ty += raw.y - S._rawLp.y;
+    clampZoom(); applyZoom();
+    S._lp=p; S._rawLp=raw;
+    return;
+  }
+
+  // ── Handle drag ──
+  if (S.moved) {
+    e.preventDefault();
+    if (S.drag==='vp' && !S.vp.locked) {
+      S.vp.x=Math.max(FENCE,Math.min(S.W-FENCE,p.x));
+      S.vp.y=Math.max(FENCE,Math.min(S.H*0.6,p.y));
+    } else if (S.drag==='w' && !S.wLocked) {
+      S.wZY=Math.max(S.vp.y+30,Math.min(S.H-FENCE,S.wZY+dy));
+      var tX=lineX(S.wBx,S.wZY)+dx*2;
+      tX=Math.max(FENCE,Math.min(S.W-FENCE,tX));
+      S.wBx=clampBx(S.vp.x+(tX-S.vp.x)*(S.H-S.vp.y)/(S.wZY-S.vp.y),S.wZY);
+    } else if (S.drag==='k' && !S.kLocked) {
+      S.kMY=Math.max(S.vp.y+30,Math.min(S.H-FENCE,S.kMY+dy));
+      var tX2=lineX(S.kBx,S.kMY)+dx*2;
+      tX2=Math.max(FENCE,Math.min(S.W-FENCE,tX2));
+      S.kBx=clampBx(S.vp.x+(tX2-S.vp.x)*(S.H-S.vp.y)/(S.kMY-S.vp.y),S.kMY);
+    } else if (S.drag==='p' && S.pActive && !S.pLocked) {
+      S.pZY=Math.max(S.vp.y+30,Math.min(S.H-FENCE,S.pZY+dy));
+      var tXp=lineX(S.pBx,S.pZY)+dx*2;
+      tXp=Math.max(FENCE,Math.min(S.W-FENCE,tXp));
+      S.pBx=clampBx(S.vp.x+(tXp-S.vp.x)*(S.H-S.vp.y)/(S.pZY-S.vp.y),S.pZY);
+    }
+    S._lp=p; S._rawLp=raw; redraw();
+  }
+}
+
+function onPU(e) {
+  delete _ptrs[e.pointerId];
+  if (Object.keys(_ptrs).length < 2) _pinch0 = null;
+
+  // Tap = any touch under 600ms (time-only, no movement penalty)
+  var isTap = (Date.now() - S._t) < 600;
+
+  if (S.drag && S.drag!=='pan' && isTap) {
+    if (S.drag==='vp') {
+      S.vp.locked = !S.vp.locked;
+    } else if (S.drag==='w') {
+      S.wLocked = !S.wLocked;
+      if (S.wLocked) {
+        var ep = exitPoint(S.wBx);
+        S.wLockedExit = {x:ep.x, y:ep.y};
+        S.wLockedBx = S.wBx; S.wLockedZY = S.wZY;
+      } else {
+        S.wLockedExit = null; S.wLockedBx = null;
+      }
+    } else if (S.drag==='k') {
+      S.kLocked = !S.kLocked;
+      if (S.kLocked) {
+        var ep2 = exitPoint(S.kBx);
+        S.kLockedExit = {x:ep2.x, y:ep2.y};
+        S.kLockedBx = S.kBx; S.kLockedMY = S.kMY;
+      } else {
+        S.kLockedExit = null; S.kLockedBx = null;
+      }
+    } else if (S.drag==='p') {
+      S.pLocked = !S.pLocked;
+      if (S.pLocked) {
+        var ep3 = exitPoint(S.pBx);
+        S.pLockedExit = {x:ep3.x, y:ep3.y};
+        S.pLockedBx = S.pBx; S.pLockedZY = S.pZY;
+      } else {
+        S.pLockedExit = null; S.pLockedBx = null; S.pLockedZY = null;
+      }
+    }
+    redraw(); updateLockBtns();
+  }
+  if (Object.keys(_ptrs).length===0) { S.drag=null; S.moved=false; }
+}
+
+// ─── DRAW ──────────────────────────────────────────────────────────────────────
+function lockIcon(locked) {
+  if(!locked) return '';
+  return '<g transform="translate(-8,-9)">'
+       + '<rect x="0" y="8" width="16" height="11" rx="2.5" fill="none" stroke="white" stroke-width="2"/>'
+       + '<path d="M4 8 V5 a4 4 0 0 1 8 0 V8" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/>'
+       + '</g>';
+}
+function redraw() {
+  if(!S.W)return;
+  var wXz=lineX(S.wBx,S.wZY), kXm=lineX(S.kBx,S.kMY);
+  var wXc=lineX(S.wBx,S.kMY), kXc=lineX(S.kBx,S.kMY);
+  var mm=widthMM();
+  document.getElementById('w-val').textContent    = mm||'—';
+  document.getElementById('side-lbl').textContent = S.wBx>S.kBx?'R':'L';
+  // Use frozen bx when locked so line angle can't drift
+  var wBxDraw = (S.wLocked && S.wLockedBx != null) ? S.wLockedBx : S.wBx;
+  var kBxDraw = (S.kLocked && S.kLockedBx != null) ? S.kLockedBx : S.kBx;
+  var wZYDraw = (S.wLocked && S.wLockedZY != null) ? S.wLockedZY : S.wZY;
+  var kMYDraw = (S.kLocked && S.kLockedMY != null) ? S.kLockedMY : S.kMY;
+
+  var p0 = (S.wLocked && S.wLockedExit) ? S.wLockedExit : exitPoint(wBxDraw);
+  var p1 = (S.kLocked && S.kLockedExit) ? S.kLockedExit : exitPoint(kBxDraw);
+
+  // isc = inverse scale: counter-scale UI elements so they stay constant screen size
+  var isc = 1 / Z.scale;
+
+  // Frame outline — counter-scaled stroke
+  var frameEl = document.getElementById('g-frame');
+  frameEl.setAttribute('d', framePath(p0,p1));
+  frameEl.setAttribute('stroke-width', (5*isc).toFixed(2));
+
+  // depth grid — counter-scaled stroke
+  var grid='';
+  for(var z=1000;z<=12000;z+=1000){
+    var py=S.vp.y+(S.focal*S.eyeH/z);
+    if(py>S.vp.y&&py<=S.H)
+      grid+='<line x1="'+lineX(wBxDraw,py)+'" y1="'+py
+           +'" x2="'+lineX(kBxDraw,py)+'" y2="'+py
+           +'" stroke="white" stroke-width="'+(1*isc).toFixed(2)+'" opacity="0.2"/>';
+  }
+  document.getElementById('g-grid').innerHTML=grid;
+
+  var bLeft=wBxDraw<kBxDraw, wLW=130, kLW=100;
+  var wLX=bLeft?32:-(wLW+32);
+  var kLX=bLeft?-(kLW+32):32;
+  var u='';
+
+  // XSZ stays constant on screen — scale by isc in content space
+  var XSZ = 12*isc;
+  // Stroke widths counter-scaled
+  var sw_line  = (2.5*isc).toFixed(2);
+  var sw_thick = (3.0*isc).toFixed(2);
+  var sw_knob  = (3.0*isc).toFixed(2);
+  var sw_cross = (3.5*isc).toFixed(2);
+  var sw_width = (2.0*isc).toFixed(2);
+  var sw_dim   = (2.0*isc).toFixed(2);
+  var dash_guide = (8*isc)+','+(5*isc);
+  var dash_w     = (4*isc)+' '+(3*isc);
+
+  // Perspective guide lines — draw to frozen exit point when locked
+  u+='<line x1="'+S.vp.x+'" y1="'+S.vp.y+'" x2="'+p0.x+'" y2="'+p0.y
+    +'" stroke="#f59e0b" stroke-width="'+(S.wLocked?sw_thick:sw_line)+'" '
+    +(S.wLocked?'':'stroke-dasharray="'+dash_guide+'" ')+'opacity="'+(S.wLocked?1:0.8)+'"/>';
+  u+='<line x1="'+S.vp.x+'" y1="'+S.vp.y+'" x2="'+p1.x+'" y2="'+p1.y
+    +'" stroke="#2dd4bf" stroke-width="'+(S.kLocked?sw_thick:sw_line)+'" '
+    +(S.kLocked?'':'stroke-dasharray="'+dash_guide+'" ')+'opacity="'+(S.kLocked?1:0.8)+'"/>';
+
+  // Width indicator — use frozen y and x positions when locked
+  var wXcDraw = lineX(wBxDraw, kMYDraw);
+  var kXcDraw = lineX(kBxDraw, kMYDraw);
+  u+='<line x1="'+wXcDraw+'" y1="'+kMYDraw+'" x2="'+kXcDraw+'" y2="'+kMYDraw
+    +'" stroke="white" stroke-width="'+sw_width+'" stroke-dasharray="'+dash_w+'" opacity="0.5"/>';
+
+  // Helper: counter-scaled group at a point
+  // transform="translate(x,y) scale(isc)" keeps visual size constant
+  var sc = isc.toFixed(4);
+
+  // Vanishing point handle
+  if(S.vp.locked) {
+    u+='<g transform="translate('+S.vp.x+','+S.vp.y+') scale('+sc+')">'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#10b981" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#10b981" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+      +'</g>';
+  } else {
+    u+='<g transform="translate('+S.vp.x+','+S.vp.y+') scale('+sc+')" opacity="0.85">'
+      +'<circle r="22" fill="#10b981" stroke="white" stroke-width="2.5"/>'
+      +'</g>';
+  }
+
+  // Building edge handle
+  var wExit = (S.wLocked && S.wLockedExit) ? S.wLockedExit : p0;
+  if(S.wLocked) {
+    u+='<g transform="translate('+wExit.x.toFixed(1)+','+wExit.y.toFixed(1)+') scale('+sc+')">'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+      +'</g>';
+    var wXzDraw = lineX(wBxDraw, wZYDraw);
+    u+='<g transform="translate('+wXzDraw+','+wZYDraw+') scale('+sc+')" opacity="0.4" fill="#f59e0b">'
+      +'<circle r="24" fill="inherit" stroke="white" stroke-width="2"/>'
+      +lockIcon(true)+'</g>';
+  } else {
+    u+='<g transform="translate('+wXz+','+S.wZY+') scale('+sc+')" fill="#f59e0b">'
+      +'<circle r="24" fill="inherit" stroke="white" stroke-width="3"/>'
+      +lockIcon(false)
+      +'<rect x="'+wLX+'" y="-16" width="'+wLW+'" height="32" rx="16" fill="#f59e0b"/>'
+      +'<text x="'+(wLX+wLW/2)+'" y="6" font-size="14" font-weight="700" fill="white" text-anchor="middle">Building edge</text>'
+      +'</g>';
+  }
+
+  // Kerb edge handle
+  var kExit = (S.kLocked && S.kLockedExit) ? S.kLockedExit : p1;
+  if(S.kLocked) {
+    u+='<g transform="translate('+kExit.x.toFixed(1)+','+kExit.y.toFixed(1)+') scale('+sc+')">'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+      +'</g>';
+    u+='<g transform="translate('+kXm+','+S.kMY+') scale('+sc+')" opacity="0.4" fill="#2dd4bf">'
+      +'<circle r="24" fill="inherit" stroke="white" stroke-width="2"/>'
+      +lockIcon(true)+'</g>';
+  } else {
+    u+='<g transform="translate('+kXm+','+S.kMY+') scale('+sc+')" fill="#2dd4bf">'
+      +'<circle r="24" fill="inherit" stroke="white" stroke-width="3"/>'
+      +lockIcon(false)
+      +'<rect x="'+kLX+'" y="-16" width="'+kLW+'" height="32" rx="16" fill="#2dd4bf"/>'
+      +'<text x="'+(kLX+kLW/2)+'" y="6" font-size="14" font-weight="700" fill="white" text-anchor="middle">Kerb edge</text>'
+      +'</g>';
+  }
+
+  // ── Property line handle (purple) — only when active ──
+  if (S.pActive) {
+    // Use frozen values when locked
+    var pBxDraw = (S.pLocked && S.pLockedBx != null) ? S.pLockedBx : S.pBx;
+    var pZYDraw = (S.pLocked && S.pLockedZY != null) ? S.pLockedZY : S.pZY;
+    var pp0     = (S.pLocked && S.pLockedExit) ? S.pLockedExit : exitPoint(pBxDraw);
+    var pXz2    = lineX(pBxDraw, pZYDraw);
+    var pLW     = 120;
+    var pLX     = pBxDraw < wBxDraw ? 32 : -(pLW+32);
+
+    // Guide line from VP to frozen frame exit
+    u+='<line x1="'+S.vp.x+'" y1="'+S.vp.y+'" x2="'+pp0.x+'" y2="'+pp0.y
+      +'" stroke="#a855f7" stroke-width="'+(S.pLocked?sw_thick:sw_line)+'" '
+      +(S.pLocked?'':'stroke-dasharray="'+dash_guide+'" ')+'opacity="'+(S.pLocked?1:0.8)+'"/>';
+
+    // Offset width indicator — use frozen building edge y when w is locked
+    var pXatW = lineX(pBxDraw, wZYDraw);
+    var wXatW = lineX(wBxDraw, wZYDraw);
+    u+='<line x1="'+pXatW+'" y1="'+wZYDraw+'" x2="'+wXatW+'" y2="'+wZYDraw
+      +'" stroke="#a855f7" stroke-width="'+sw_width+'" stroke-dasharray="'+dash_w+'" opacity="0.6"/>';
+
+    // Handle — locked = X at frozen exit, unlocked = circle with label
+    if (S.pLocked) {
+      u+='<g transform="translate('+pp0.x.toFixed(1)+','+pp0.y.toFixed(1)+') scale('+sc+')">'
+        +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#a855f7" stroke-width="3.5" stroke-linecap="round"/>'
+        +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#a855f7" stroke-width="3.5" stroke-linecap="round"/>'
+        +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+        +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
+        +'</g>';
+      u+='<g transform="translate('+pXz2+','+pZYDraw+') scale('+sc+')" opacity="0.4" fill="#a855f7">'
+        +'<circle r="24" fill="inherit" stroke="white" stroke-width="2"/>'
+        +lockIcon(true)+'</g>';
+    } else {
+      u+='<g transform="translate('+pXz2+','+pZYDraw+') scale('+sc+')" fill="#a855f7">'
+        +'<circle r="24" fill="inherit" stroke="white" stroke-width="3"/>'
+        +lockIcon(false)
+        +'<rect x="'+pLX+'" y="-16" width="'+pLW+'" height="32" rx="16" fill="#a855f7"/>'
+        +'<text x="'+(pLX+pLW/2)+'" y="6" font-size="14" font-weight="700" fill="white" text-anchor="middle">Property line</text>'
+        +'</g>';
+    }
+
+    // Update offset badge
+    var offMM = offsetMM();
+    var obadge = document.getElementById('offset-badge');
+    var oval   = document.getElementById('offset-val');
+    if (obadge && oval && offMM !== null) {
+      obadge.style.display = 'block';
+      oval.textContent = offMM;
+    }
+  } else {
+    var obadge2 = document.getElementById('offset-badge');
+    if (obadge2) obadge2.style.display = 'none';
+  }
+
+  // ── A4 calibration points (Method 2) — plain tapped markers, no perspective lines ──
+  if (S.aMode && S.aPts.length) {
+    S.aPts.forEach(function(pt, idx){
+      u+='<g transform="translate('+pt.x.toFixed(1)+','+pt.y.toFixed(1)+') scale('+sc+')">'
+        +'<circle r="14" fill="#e879f9" stroke="white" stroke-width="2.5"/>'
+        +'<text x="0" y="5" font-size="14" font-weight="800" fill="#0c1220" text-anchor="middle">'+(idx+1)+'</text>'
+        +'</g>';
+    });
+    if (S.aPts.length === 2) {
+      u+='<line x1="'+S.aPts[0].x+'" y1="'+S.aPts[0].y+'" x2="'+S.aPts[1].x+'" y2="'+S.aPts[1].y
+        +'" stroke="#e879f9" stroke-width="'+sw_width+'" stroke-dasharray="'+dash_w+'"/>';
+    }
+  }
+
+  document.getElementById('g-ui').innerHTML=u;
+}
+
+// ─── PROPERTY LINE TOGGLE ─────────────────────────────────────────────────────
+function togglePropertyLine() {
+  S.pActive = !S.pActive;
+  if (S.pActive) {
+    // Initialise position: same y as building edge, offset to the outside
+    S.pZY = S.wZY;
+    // Place it on the opposite side of the building edge from the kerb
+    var offset = (S.wBx > S.kBx) ? 80 : -80; // 80px away from building edge
+    S.pBx = clampBx(S.wBx + offset, S.pZY);
+    S.pLocked = false; S.pLockedExit = null;
+  }
+  // Update knob visual
+  var btn = document.getElementById('prop-knob-btn');
+  if (btn) {
+    btn.style.background  = S.pActive ? 'rgba(168,85,247,0.55)' : 'rgba(168,85,247,0.18)';
+    btn.style.border      = S.pActive ? '2px solid #a855f7'     : '2px dashed rgba(168,85,247,0.45)';
+    btn.querySelector('svg').setAttribute('stroke', S.pActive ? 'white' : 'rgba(168,85,247,0.7)');
+  }
+  // Show/hide offset tape measure row
+  var row = document.getElementById('offset-input-row');
+  if (row) row.style.display = S.pActive ? 'flex' : 'none';
+  if (!S.pActive) {
+    var inp = document.getElementById('manual-offset-mm');
+    if (inp) inp.value = '';
+    var ob = document.getElementById('offset-badge');
+    if (ob) ob.style.display = 'none';
+  }
+  redraw();
+}
+
+// ─── SWAP / NUDGE ──────────────────────────────────────────────────────────────
+function swap() {
+  var t=S.wBx;S.wBx=S.kBx;S.kBx=t;
+  var ty=S.wZY;S.wZY=S.kMY;S.kMY=ty;
+  redraw();
+}
+function nudgeVP(dx, dy) {
+  if (S.vp.locked) return;
+  S.vp.x = Math.max(FENCE, Math.min(S.W-FENCE, S.vp.x + dx));
+  S.vp.y = Math.max(FENCE, Math.min(S.H*0.6,   S.vp.y + dy));
+  redraw();
+}
+function toggleLockW() {
+  S.wLocked = !S.wLocked;
+  if (S.wLocked) {
+    var ep = exitPoint(S.wBx);
+    S.wLockedExit = {x:ep.x, y:ep.y};
+    S.wLockedBx = S.wBx; S.wLockedZY = S.wZY;
+  } else {
+    S.wLockedExit = null; S.wLockedBx = null;
+  }
+  redraw(); updateLockBtns();
+}
+function toggleLockK() {
+  S.kLocked = !S.kLocked;
+  if (S.kLocked) {
+    var ep2 = exitPoint(S.kBx);
+    S.kLockedExit = {x:ep2.x, y:ep2.y};
+    S.kLockedBx = S.kBx; S.kLockedMY = S.kMY;
+  } else {
+    S.kLockedExit = null; S.kLockedBx = null;
+  }
+  redraw(); updateLockBtns();
+}
+function updateLockBtns() {
+  var wb=document.getElementById('lock-w-btn');
+  var kb=document.getElementById('lock-k-btn');
+  if(!wb||!kb) return;
+  // Building edge button
+  if(S.wLocked) {
+    wb.style.background='rgba(245,158,11,0.15)';
+    wb.style.borderColor='#f59e0b';
+    document.getElementById('lock-w-label').textContent='Unlock Building Edge';
+    document.getElementById('lock-w-icon').innerHTML=
+      '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0"/>';
+  } else {
+    wb.style.background='var(--surface)';
+    wb.style.borderColor='#f59e0b33';
+    document.getElementById('lock-w-label').textContent='Lock Building Edge';
+    document.getElementById('lock-w-icon').innerHTML=
+      '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+  }
+  // Kerb edge button
+  if(S.kLocked) {
+    kb.style.background='rgba(45,212,191,0.12)';
+    kb.style.borderColor='#2dd4bf';
+    document.getElementById('lock-k-label').textContent='Unlock Kerb Edge';
+    document.getElementById('lock-k-icon').innerHTML=
+      '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0"/>';
+  } else {
+    kb.style.background='var(--surface)';
+    kb.style.borderColor='#2dd4bf33';
+    document.getElementById('lock-k-label').textContent='Lock Kerb Edge';
+    document.getElementById('lock-k-icon').innerHTML=
+      '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+  }
+}
+
+// ─── MATERIALS ─────────────────────────────────────────────────────────────────
+function toggleMat(id) {
+  var el=document.getElementById('mat-'+id);
+  if(S.selMats.has(id)){S.selMats.delete(id);el.classList.remove('sel');}
+  else                 {S.selMats.add(id);   el.classList.add('sel');   }
+}
+
+// ─── GRADE ─────────────────────────────────────────────────────────────────────
+// ─── MANUAL MEASUREMENT DIFF ───────────────────────────────────────────────────
+function updateDiff() {
+  var manual = parseInt(document.getElementById('manual-mm').value);
+  var calc   = widthMM();
+  var badge  = document.getElementById('diff-badge');
+  if (!manual || !calc) { badge.style.display = 'none'; return; }
+  var diff    = manual - calc;
+  var pct     = Math.round(Math.abs(diff) / manual * 100);
+  var over    = diff > 0;
+  badge.style.display   = 'inline-block';
+  badge.style.background = pct <= 5  ? 'rgba(34,197,94,0.15)'  :
+                            pct <= 15 ? 'rgba(253,211,77,0.15)' :
+                                        'rgba(239,68,68,0.15)';
+  badge.style.color      = pct <= 5  ? 'var(--success)'  :
+                            pct <= 15 ? 'var(--warn)'     :
+                                        'var(--danger)';
+  badge.style.border     = '1px solid ' + (pct <= 5 ? 'rgba(34,197,94,0.3)' :
+                            pct <= 15 ? 'rgba(253,211,77,0.3)' : 'rgba(239,68,68,0.3)');
+  badge.textContent = (over ? '+' : '') + diff + 'mm (' + pct + '%)';
+}
+
+function grade(mm) {
+  if(mm<900)  return{l:'narrow',    c:'#fca5a5'};
+  if(mm<1800) return{l:'marginal',  c:'#fcd34d'};
+  return           {l:'accessible',c:'#86efac'};
+}
+
+// ─── CAPTURE ANNOTATED IMAGE ───────────────────────────────────────────────────
+function captureAnnotated() {
+  return new Promise(function(resolve) {
+    if(!S.rawImgB64){resolve(null);return;}
+    var canvas=document.createElement('canvas');
+    canvas.width=S.W; canvas.height=S.H;
+    var ctx=canvas.getContext('2d');
+    var bgImg=new Image();
+    bgImg.onload=function() {
+      ctx.drawImage(bgImg,0,0,S.W,S.H);
+      // Render SVG overlay without background image
+      var svgEl=document.getElementById('svg').cloneNode(true);
+      var si=svgEl.querySelector('#simg');
+      si.setAttribute('href','');
+      si.removeAttribute('href');
+      var svgStr=new XMLSerializer().serializeToString(svgEl);
+      var blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
+      var url=URL.createObjectURL(blob);
+      var ov=new Image();
+      ov.onload=function(){
+        ctx.drawImage(ov,0,0,S.W,S.H);
+        URL.revokeObjectURL(url);
+        resolve(canvas.toDataURL('image/jpeg',0.88));
+      };
+      ov.onerror=function(){resolve(canvas.toDataURL('image/jpeg',0.88));};
+      ov.src=url;
+    };
+    bgImg.onerror=function(){resolve(null);};
+    bgImg.src=S.rawImgB64;
+  });
+}
+
+// ─── SUBMIT ────────────────────────────────────────────────────────────────────
+async function submitRecord() {
+  if(!S.imgLoaded){showToast('Upload a photo first','error');return;}
+  var mm=widthMM();
+  if(!mm){showToast('Position the lines on the photo first','error');return;}
+
+  var btn=document.getElementById('btn-submit');
+  btn.disabled=true;
+  setStatus('Saving…','');
+
+  var g=grade(mm);
+  var now=new Date();
+  var t=now.toLocaleTimeString();
+  var dateStr=now.toISOString().slice(0,10);
+  var id=S.recs.length+1;
+  var sd=S.wBx>S.kBx?'R':'L';
+  var mats=Array.from(S.selMats).join(', ')||'—';
+  var imgName='fp_'+dateStr+'_'+U.name.replace(/\s+/g,'_')+'_'+id;
+
+  var annotatedB64=null;
+  try{annotatedB64=await captureAnnotated();}catch(ex){}
+
+  var manualMM       = parseInt(document.getElementById('manual-mm').value) || null;
+  var manualOffsetMM = S.pActive ? (parseInt(document.getElementById('manual-offset-mm').value) || null) : null;
+  var calcOffsetMM   = S.pActive ? offsetMM() : null;
+  var edgeType       = S.pActive ? 'Building Offset' : 'Property Edge';
+  var rec={
+    id, side:sd, mm, manualMM, grade:g.l, material:mats,
+    edgeType, calcOffsetMM, manualOffsetMM,
+    lat:S.lat||'', lng:S.lng||'',
+    time:now.toISOString(), surveyor:U.name,
+    phone:U.phone, model:U.model
+  };
+
+  if (APPS_SCRIPT_URL) {
+    // ── Step 1: Log row (small payload, always reliable) ──
+    setStatus('Saving to Sheets…', '');
+    var rowOk = false;
+    try {
+      await postToScript({ action: 'logRow', row: rec });
+      rowOk = true;
+      setStatus('Row saved ✓ — uploading images…', 'ok');
+    } catch(err) {
+      setStatus('Sheet error: ' + err.message + ' — check script is redeployed', 'err');
+    }
+
+    // ── Step 2: Upload images to Drive via Render proxy ──
+    if (rowOk) {
+      var rawSnap = S.rawImgB64, annSnap = annotatedB64;
+      ;(async function() {
+        try {
+          var rawC = rawSnap ? await compressImage(rawSnap, 800, 0.82) : null;
+          var annC = annSnap ? await compressImage(annSnap, 800, 0.82) : null;
+          var uploaded = 0;
+
+          if (gAccessToken) {
+            // Direct Drive upload via Google OAuth (primary)
+            setStatus('Row saved ✓ — uploading to Drive…', 'ok');
+            if (rawC) { await uploadImageToDrive(imgName+'_raw.jpg', rawC.split(',')[1]); uploaded++; }
+            if (annC) { await uploadImageToDrive(imgName+'_annotated.jpg', annC.split(',')[1]); uploaded++; }
+          } else if (IMAGE_SERVER_URL) {
+            // Proxy server fallback
+            setStatus('Row saved ✓ — uploading via server…', 'ok');
+            if (rawC) { await uploadImageToServer(IMAGE_SERVER_URL, imgName+'_raw.jpg', rawC.split(',')[1]); uploaded++; }
+            if (annC) { await uploadImageToServer(IMAGE_SERVER_URL, imgName+'_annotated.jpg', annC.split(',')[1]); uploaded++; }
+          } else {
+            showDownloadBanner(rawSnap, annSnap, imgName);
+            setStatus('Row saved ✓ — sign in with Google in ⚙ Settings to auto-upload images', '');
+            return;
+          }
+
+          setStatus('Saved ✓ — ' + uploaded + ' image(s) uploaded to Drive', 'ok');
+          hideDownloadBanner();
+        } catch(imgErr) {
+          setStatus('Row saved ✓ — image upload failed: ' + imgErr.message, 'err');
+          showDownloadBanner(rawSnap, annSnap, imgName);
+        }
+      })();
+    }
+  } else {
+    setStatus('Saved locally — add Apps Script URL in ⚙ Settings to sync', '');
+  }
+
+  // Update records table
+  S.recs.push(rec);
+  document.getElementById('rec-body').innerHTML+=
+    '<tr><td>'+id+'</td><td>'+sd+'</td>'
+    +'<td class="hi">'+mm+'</td>'
+    +'<td style="font-size:10px;">'+mats+'</td>'
+    +'<td style="color:'+g.c+'">'+g.l+'</td>'
+    +'<td style="color:#475569">'+t+'</td></tr>';
+  document.getElementById('recsec').style.display='block';
+
+  showToast('Submitted!','success');
+  setTimeout(function(){
+    resetForNext();
+    btn.disabled=false;
+  },1400);
+}
+
+// ─── IMAGE COMPRESSION ────────────────────────────────────────────────────────
+function compressImage(dataUrl, maxPx, quality) {
+  return new Promise(function(resolve) {
+    if (!dataUrl) { resolve(null); return; }
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxPx || h > maxPx) {
+        if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+        else       { w = Math.round(w * maxPx / h); h = maxPx; }
+      }
+      var c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL('image/jpeg', quality || 0.80));
+    };
+    img.onerror = function() { resolve(dataUrl); };
+    img.src = dataUrl;
+  });
+}
+
+// ─── APPS SCRIPT COMMUNICATION ────────────────────────────────────────────────
+// Must use text/plain — application/json triggers a CORS preflight that
+// Apps Script doesn't handle, so the POST would never reach doPost().
+function postToScript(payload) {
+  return fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+    redirect: 'follow'
+  })
+  .then(function(r) { return r.text(); })
+  .then(function(text) {
+    try {
+      var data = JSON.parse(text);
+      if (data && data.ok === false) throw new Error(data.error || 'Script error');
+      return data || { ok: true };
+    } catch(e) {
+      // A non-JSON response (e.g. redirect HTML) still means the POST reached the script
+      if (text && text.length > 0) return { ok: true };
+      throw e;
+    }
+  });
+}
+
+function resetForNext() {
+  document.getElementById('svg').style.display         ='none';
+  document.getElementById('empty').style.display        ='flex';
+  document.getElementById('img-actions').style.display  ='none';
+  document.getElementById('ovr').style.display          ='none';
+  document.getElementById('hint').style.display         ='none';
+  document.getElementById('w-val').textContent          ='—';
+  S.imgLoaded=false; S.rawImgB64=null;
+  var mi=document.getElementById('manual-mm'); if(mi){mi.value='';}
+  var db=document.getElementById('diff-badge'); if(db){db.style.display='none';}
+  // Reset property line
+  S.pActive=false; S.pLocked=false; S.pLockedExit=null; S.pLockedBx=null; S.pLockedZY=null;
+  var pk=document.getElementById('prop-knob'); if(pk){pk.style.display='none';}
+  var pkb=document.getElementById('prop-knob-btn');
+  if(pkb){pkb.style.background='rgba(168,85,247,0.18)';pkb.style.border='2px dashed rgba(168,85,247,0.45)';}
+  var oir=document.getElementById('offset-input-row'); if(oir){oir.style.display='none';}
+  var oif=document.getElementById('manual-offset-mm'); if(oif){oif.value='';}
+  var ob=document.getElementById('offset-badge'); if(ob){ob.style.display='none';}
+  S.selMats.clear();
+  ['paver','cement','mud'].forEach(function(m){
+    document.getElementById('mat-'+m).classList.remove('sel');
+  });
+  // Zero/kerb locks reset; VP lock PRESERVED
+  S.wLocked=false; S.kLocked=false; S.wLockedExit=null; S.kLockedExit=null;
+  updateLockBtns();
+  setStatus('','');
+  refreshGeo();
+}
+
+// ─── CALIBRATION ───────────────────────────────────────────────────────────────
+function openCalModal() {
+  var cal=JSON.parse(localStorage.getItem('fp_cal_'+U.model)||'{}');
+  document.getElementById('cal-phone-lbl').textContent = U.model;
+  document.getElementById('cal-scale-lbl').textContent = (cal.scaleFactor||1).toFixed(3)+'×';
+  document.getElementById('cal-eyeh-lbl').textContent  = (cal.eyeH||U.eyeH||1200)+' mm';
+  document.getElementById('cal-eyeh-input').value      = cal.eyeH||U.eyeH||1200;
+  document.getElementById('cal-height-input').value    = U.heightCM || '';
+  document.getElementById('cal-ref-input').value       = '';
+  document.getElementById('cal-method1-panel').style.display = 'none';
+  document.getElementById('cal-modal').style.display   = 'flex';
+}
+function closeCalModal(e) {
+  if(!e||e.target===document.getElementById('cal-modal'))
+    document.getElementById('cal-modal').style.display='none';
+}
+// Logs the current eyeH/scaleFactor for this surveyor to a 'Calibration' tab
+// in the same sheet (via a new Apps Script action — see apps_script_additions.gs)
+// so the Measurements-processing pipeline can look up a surveyor's scale by
+// email, from any device, without needing their phone's localStorage.
+function syncCalibrationToSheet() {
+  if (!APPS_SCRIPT_URL || !U.email) return;
+  postToScript({ action:'logCalibration', row: {
+    surveyor: U.email, model: U.model, eyeH: S.eyeH, scaleFactor: S.scaleFactor,
+    time: new Date().toISOString()
+  }}).catch(function() { /* non-fatal — local calibration still applies on this device */ });
+}
+
+function doCalibrate() {
+  var newEyeH = applyEyeHFromInput();
+  var refMM   = parseFloat(document.getElementById('cal-ref-input').value);
+
+  if(refMM){
+    if(!S.imgLoaded){
+      showToast('Load image & position lines first','error');
+      return;
+    }
+    var raw=widthMMRaw();
+    if(raw>0) S.scaleFactor=refMM/raw;
+  }
+
+  var cal={eyeH:newEyeH,scaleFactor:S.scaleFactor};
+  localStorage.setItem('fp_cal_'+U.model,JSON.stringify(cal));
+  updateCalBadge();
+  if(S.imgLoaded) redraw();
+  closeCalModal();
+  showToast('Calibration saved for '+U.model,'success');
+  document.getElementById('cal-nudge').style.display='none';
+  document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor!==1.0);
+  syncCalibrationToSheet();
+}
+function resetCal() {
+  if(!confirm('Reset calibration for '+U.model+'?')) return;
+  S.scaleFactor=1.0;
+  S.eyeH=U.eyeH||1200;
+  localStorage.removeItem('fp_cal_'+U.model);
+  updateCalBadge();
+  if(S.imgLoaded) redraw();
+  closeCalModal();
+  showToast('Calibration reset','info');
+  document.getElementById('btn-cal-hdr').classList.remove('active');
+}
+function updateCalBadge() {
+  var el=document.getElementById('cal-badge');
+  el.textContent='Scale: '+S.scaleFactor.toFixed(2)+'×';
+  el.classList.toggle('calibrated', S.scaleFactor!==1.0);
+}
+
+// ─── CAMERA HEIGHT FROM PERSON'S HEIGHT ───────────────────────────────────────
+// Rough heuristic only: people shooting footpath photos typically hold the
+// phone around chest/elbow height, not full eye level, and this app's own
+// long-standing default (1200mm) implies roughly that ratio for an average
+// adult. This just gives a starting point — Method 1 or Method 2 calibration
+// still does the real correction afterward.
+var CAMERA_HEIGHT_RATIO = 0.70;
+function estimateEyeHFromHeight() {
+  var heightCM = parseFloat(document.getElementById('cal-height-input').value);
+  if (!heightCM || heightCM < 100 || heightCM > 230) {
+    showToast('Enter your height in cm, e.g. 170','error');
+    return;
+  }
+  var estMM = Math.round(heightCM * 10 * CAMERA_HEIGHT_RATIO);
+  document.getElementById('cal-eyeh-input').value = estMM;
+  U.heightCM = heightCM;
+  localStorage.setItem('fp_user', JSON.stringify(U));
+  syncSurveyorProfile({ heightCM: heightCM });
+  showToast('Estimated ~' + estMM + 'mm — still fine-tune with a calibration below','info');
+}
+// Upserts whichever fields are passed to the 'Surveyors' tab by email (see
+// apps_script_additions.gs) — name/phone from login, heightCM from the
+// estimator — so a surveyor's profile is remembered across devices/sessions
+// instead of being re-typed every time. Fields not passed are left as-is on
+// the sheet (the backend only overwrites what's actually provided).
+function syncSurveyorProfile(fields) {
+  if (!APPS_SCRIPT_URL || !U.email) return;
+  var payload = Object.assign({ action:'logHeight', surveyor: U.email }, fields);
+  postToScript(payload).catch(function() { /* non-fatal — local value still applies on this device */ });
+}
+// Looks up a previously-synced height for this email (e.g. on a new device
+// or after clearing local storage) and fills it in if we don't have one yet.
+function fetchHeightIfMissing() {
+  if (U.heightCM || !APPS_SCRIPT_URL || !U.email) return;
+  postToScript({ action:'getHeight', surveyor: U.email })
+    .then(function(d) {
+      if (d && d.heightCM) {
+        U.heightCM = d.heightCM;
+        localStorage.setItem('fp_user', JSON.stringify(U));
+      }
+    })
+    .catch(function() { /* non-fatal */ });
+}
+// Reads the Camera Height field and applies it to the live model — shared by
+// both doCalibrate() (Method 1) and confirmA4() (Method 2) so eyeH is always
+// in effect before either method computes its scaleFactor.
+function applyEyeHFromInput() {
+  var el = document.getElementById('cal-eyeh-input');
+  var v = parseInt(el && el.value) || S.eyeH || 1200;
+  S.eyeH = v;
+  return v;
+}
+// Toggles which calibration method's fields are shown. 0 = collapse back to
+// the chooser, 1 = reveal the known-width fields inline, 2 = hand off to the
+// A4 instructions modal (which itself leads into startA4Mode()).
+function chooseCalMethod(n) {
+  var panel1 = document.getElementById('cal-method1-panel');
+  if (n === 1) {
+    panel1.style.display = 'block';
+  } else if (n === 2) {
+    panel1.style.display = 'none';
+    applyEyeHFromInput();
+    closeCalModal();
+    document.getElementById('a4-instructions-modal').style.display = 'flex';
+  } else {
+    panel1.style.display = 'none';
+  }
+}
+
+
+// Alternative to typing in a known reference width (Method 1): place a real
+// A4 sheet flat on the ground in the photo, tap its two edges, and let the
+// sheet's standard 210×297mm size calibrate scaleFactor directly. This reuses
+// the exact same underlying math as Method 1 (lineX/toWorldMM against the
+// current vp + eyeH) — it does NOT introduce a second, independent camera
+// model — so the two methods can never disagree with each other, only refine
+// the same scaleFactor.
+function startA4Mode() {
+  if (!S.imgLoaded) { showToast('Load a photo first','error'); return; }
+  applyEyeHFromInput();
+  closeCalModal();
+  S.aMode = true;
+  S.aPts = [];
+  document.getElementById('a4-panel').style.display = 'block';
+  updateA4Panel();
+  redraw();
+}
+function cancelA4Mode() {
+  S.aMode = false;
+  S.aPts = [];
+  document.getElementById('a4-panel').style.display = 'none';
+  redraw();
+}
+function placeA4Point(p) {
+  if (S.aPts.length < 2) {
+    S.aPts.push({ x:p.x, y:p.y });
+  } else {
+    S.aPts = [{ x:p.x, y:p.y }]; // third tap restarts
+  }
+  updateA4Panel();
+  redraw();
+}
+function updateA4Panel() {
+  var txt = document.getElementById('a4-panel-text');
+  var choices = document.getElementById('a4-panel-choices');
+  if (!txt || !choices) return;
+  if (S.aPts.length === 0) {
+    txt.textContent = 'Tap one edge of the A4 sheet in the photo.';
+    choices.style.display = 'none';
+  } else if (S.aPts.length === 1) {
+    txt.textContent = 'Now tap the opposite edge of the same sheet.';
+    choices.style.display = 'none';
+  } else {
+    txt.textContent = 'Which edge of the sheet did you mark?';
+    choices.style.display = 'flex';
+  }
+}
+function confirmA4(knownMM) {
+  if (S.aPts.length < 2) return;
+  applyEyeHFromInput();
+  var y = (S.aPts[0].y + S.aPts[1].y) / 2;
+  var raw = a4RawWidthAt(y);
+  if (!(raw > 0)) {
+    showToast('Could not calibrate — tap two distinct points','error');
+    cancelA4Mode();
+    return;
+  }
+  S.scaleFactor = knownMM / raw;
+  var cal = { eyeH:S.eyeH, scaleFactor:S.scaleFactor };
+  localStorage.setItem('fp_cal_' + U.model, JSON.stringify(cal));
+  updateCalBadge();
+  redraw();
+  cancelA4Mode();
+  showToast('Calibrated from A4 sheet ✓','success');
+  document.getElementById('cal-nudge').style.display = 'none';
+  document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
+  syncCalibrationToSheet();
+}
+
+// ─── EXPORT CSV ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  var rows=['#,Surveyor,Phone,Model,Side,Width (mm),Tape Measure (mm),Material,Grade,Lat,Lng,Timestamp'];
+  S.recs.forEach(function(r){
+    rows.push([r.id,r.surveyor,r.phone,r.model,r.side,r.mm,r.manualMM||'',
+               '"'+r.material+'"',r.grade,r.lat,r.lng,r.time].join(','));
+  });
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  a.download='footpath_widths_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// ─── PROCESS MEASUREMENTS SHEET ────────────────────────────────────────────────
+// Batch pipeline: for each 'Measurements' row missing footpath_width_by_model,
+// downloads the annotated_image, detects the neon-green (road/kerb edge) and
+// pink (building edge) overlay lines by colour, finds their intersection —
+// which IS the one-point-perspective vanishing point for that photo, since
+// both edges of a straight path converge there — then reuses the exact same
+// toWorldMM() formula the interactive tool uses, with that surveyor's saved
+// eyeH + scaleFactor, to compute the width. Runs entirely in the browser
+// (canvas pixel access) since Apps Script has no image-decoding API for this.
+
+function openProcessModal() {
+  if (ADMIN_EMAIL && (!U.email || U.email.trim().toLowerCase() !== ADMIN_EMAIL.trim().toLowerCase())) {
+    showToast('Process Measurements is restricted', 'error');
+    return;
+  }
+  document.getElementById('process-log').innerHTML = '';
+  document.getElementById('process-modal').style.display = 'flex';
+}
+
+// Colour thresholds — calibrated against real annotated photos (not guessed):
+// the green line samples cluster around RGB(40,165,20), with compressed/
+// anti-aliased pixels commonly down to G≈160, so the floor needed to be
+// lower than a first guess of 170. Pink samples cluster around RGB(220,115,160)
+// peaking near (250,100,170) — that one held up as originally set.
+// Per the legend in the actual images: pink = "edge bordering road" (road/
+// kerb edge), green = "other edge" (building edge) — opposite of what was
+// first assumed, though it doesn't change the computed width either way
+// since we just take the distance between the two lines.
+function isNeonGreen(r,g,b) { return g > 140 && (g - r) > 50 && (g - b) > 50; } // building edge
+function isPinkEdge(r,g,b)  { return r > 170 && b > 130 && (r - g) > 40 && (b - g) > 20; } // road/kerb edge
+
+function driveFileIdFromUrl(url) {
+  if (!url) return null;
+  var m = String(url).match(/[-\w]{20,}/g);
+  if (!m) return null;
+  // Drive file IDs are the longest matching token in the URL
+  return m.sort(function(a,b){ return b.length - a.length; })[0];
+}
+
+function fetchDriveImageBlob(fileId) {
+  if (!gAccessToken) throw new Error('Sign in with Google (⚙ Settings) first');
+  return fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', {
+    headers: { 'Authorization': 'Bearer ' + gAccessToken }
+  }).then(function(r) {
+    if (r.status === 401) {
+      gAccessToken = null;
+      updateGoogleAuthStatus();
+      var authErr = new Error('Google sign-in expired');
+      authErr.authExpired = true;
+      throw authErr;
+    }
+    if (!r.ok) throw new Error('Drive fetch failed (' + r.status + ')');
+    return r.blob();
+  });
+}
+
+function loadImageFromBlob(blob) {
+  return new Promise(function(resolve, reject) {
+    var url = URL.createObjectURL(blob);
+    var img = new Image();
+    img.onload = function() { resolve({ img:img, url:url }); };
+    img.onerror = function() { reject(new Error('Could not decode image')); };
+    img.src = url;
+  });
+}
+
+function getImageDataFromImg(img) {
+  var c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  var cctx = c.getContext('2d');
+  cctx.drawImage(img, 0, 0);
+  return cctx.getImageData(0, 0, c.width, c.height);
+}
+
+// Scans every `step`-th pixel and collects coordinates matching matchFn.
+function scanColouredPixels(imageData, matchFn) {
+  var data = imageData.data, w = imageData.width, h = imageData.height, step = 2;
+  var pts = [];
+  for (var y = 0; y < h; y += step) {
+    for (var x = 0; x < w; x += step) {
+      var idx = (y * w + x) * 4;
+      if (data[idx+3] < 200) continue;
+      if (matchFn(data[idx], data[idx+1], data[idx+2])) pts.push({ x:x, y:y });
+    }
+  }
+  return pts;
+}
+
+// Fits x = m*y + c (regressing x on y, not y on x) — handles the
+// steep/near-vertical perspective lines this app expects correctly,
+// where a normal y=mx+b fit would blow up.
+function fitLineXonY(pts) {
+  if (pts.length < 8) return null;
+  var n = pts.length, sy=0, sx=0, syy=0, sxy=0;
+  for (var i=0;i<n;i++) { var p=pts[i]; sy+=p.y; sx+=p.x; syy+=p.y*p.y; sxy+=p.x*p.y; }
+  var denom = n*syy - sy*sy;
+  if (Math.abs(denom) < 1e-6) return null;
+  var m = (n*sxy - sy*sx) / denom;
+  var c = (sx - m*sy) / n;
+  return { m:m, c:c };
+}
+
+// One round of outlier rejection (drop points >2 std-dev from the initial
+// fit) then refit — a light RANSAC-lite pass against stray matching pixels.
+function robustFitLineXonY(pts) {
+  var fit = fitLineXonY(pts);
+  if (!fit) return null;
+  var resid = pts.map(function(p){ return p.x - (fit.m*p.y + fit.c); });
+  var mean = resid.reduce(function(a,b){return a+b;},0) / resid.length;
+  var variance = resid.reduce(function(a,b){return a+(b-mean)*(b-mean);},0) / resid.length;
+  var sd = Math.sqrt(variance) || 1;
+  var filtered = pts.filter(function(p,i){ return Math.abs(resid[i]-mean) < 2*sd; });
+  return fitLineXonY(filtered) || fit;
+}
+
+// The other model draws its own vanishing-point marker (a solid blue dot,
+// arrived at via multi-line consensus — much sturdier than intersecting just
+// 2 detected lines, which can swing wildly off when the two lines happen to
+// be nearly parallel in a given shot). RGB(~10-40, ~50-75, ~200-235)
+// calibrated against real samples from test photos.
+//
+// This same blue also appears in the legend's own "vanishing point" swatch,
+// which sits in a fixed bottom-right corner in both test photos — so that
+// corner is excluded from the search below. This is a positional assumption
+// about the legend, not something detected; if the other model ever moves
+// or resizes its legend, this exclusion box needs to move with it.
+function isVpBlue(r,g,b) { return r < 60 && g < 100 && b > 180 && (b - r) > 140; }
+var MIN_VP_MARKER_PIXELS  = 8;
+var MAX_VP_MARKER_SPAN_FR = 0.06; // marker cluster's bounding-box diagonal, as a fraction of image diagonal — real dot is tiny; anything bigger is scattered blue elsewhere (vehicles, sky, signage), not the marker
+
+function findVpMarker(imageData) {
+  var data = imageData.data, w = imageData.width, h = imageData.height;
+  var legendY = 0.78 * h; // exclude the legend's row-band entirely — see note above
+  var xs = [], ys = [];
+  for (var y = 0; y < legendY; y++) {
+    for (var x = 0; x < w; x++) {
+      var idx = (y * w + x) * 4;
+      if (isVpBlue(data[idx], data[idx+1], data[idx+2])) { xs.push(x); ys.push(y); }
+    }
+  }
+  if (xs.length < MIN_VP_MARKER_PIXELS) return null;
+  var minX=Math.min.apply(null,xs), maxX=Math.max.apply(null,xs);
+  var minY=Math.min.apply(null,ys), maxY=Math.max.apply(null,ys);
+  var span = Math.hypot(maxX-minX, maxY-minY);
+  var imgDiag = Math.hypot(w, h);
+  if (span > MAX_VP_MARKER_SPAN_FR * imgDiag) return null; // too spread out to be one dot
+  var sx=0, sy=0;
+  for (var i=0;i<xs.length;i++) { sx+=xs[i]; sy+=ys[i]; }
+  return { x: sx/xs.length, y: sy/xs.length };
+}
+
+function intersectLinesXonY(a, b) {
+  var denom = a.m - b.m;
+  if (Math.abs(denom) < 1e-9) return null; // parallel — no vanishing point found
+  var y = (b.c - a.c) / denom;
+  var x = a.m*y + a.c;
+  return { x:x, y:y };
+}
+
+// Width estimation, take 2: evaluating at a single row (even near the
+// bottom of frame) turned out to be fragile — tested against real annotated
+// photos, rows close to the vanishing point are wildly unstable (a few
+// pixels of line-fit noise there swings the estimate by thousands of mm,
+// since the (eyeH / (y - vp.y)) term blows up as y approaches vp.y). Rows
+// far from vp — near the bottom, closest to the camera — are far more
+// stable. So: sample many rows across the bottom 35% of the range where
+// both lines were actually detected, and take the median. The spread of
+// those samples doubles as a trustworthiness check — a fit that's actually
+// tracking one straight line gives a tight spread; a bad detection doesn't.
+var WIDTH_SAMPLE_BAND_FRACTION = 0.35;
+var WIDTH_SAMPLE_STEP_PX = 3;
+var MAX_WIDTH_SPREAD_FRACTION = 0.25; // spread/median above this = don't trust it
+
+function computeWidthFromDetectedLines(greenPts, pinkPts, greenLine, pinkLine, vp, eyeH) {
+  var minY = Math.max(Math.min.apply(null, greenPts.map(function(p){return p.y;})),
+                       Math.min.apply(null, pinkPts.map(function(p){return p.y;})));
+  var maxY = Math.min(Math.max.apply(null, greenPts.map(function(p){return p.y;})),
+                       Math.max.apply(null, pinkPts.map(function(p){return p.y;})));
+  var lowY = maxY - WIDTH_SAMPLE_BAND_FRACTION * (maxY - minY);
+  function toWorldMMLocal(sx, sy) { return sy <= vp.y ? 0 : (sx - vp.x) * (eyeH / (sy - vp.y)); }
+
+  var samples = [];
+  for (var y = lowY; y < maxY; y += WIDTH_SAMPLE_STEP_PX) {
+    if (y <= vp.y) continue;
+    var xg = greenLine.m*y + greenLine.c;
+    var xp = pinkLine.m*y + pinkLine.c;
+    samples.push(Math.abs(toWorldMMLocal(xg, y) - toWorldMMLocal(xp, y)));
+  }
+  if (!samples.length) return { median: 0, ok: false };
+
+  samples.sort(function(a,b){ return a-b; });
+  var mid = Math.floor(samples.length/2);
+  var median = samples.length % 2 ? samples[mid] : (samples[mid-1]+samples[mid])/2;
+  var absDevs = samples.map(function(s){ return Math.abs(s - median); }).sort(function(a,b){return a-b;});
+  var mad = absDevs[Math.floor(absDevs.length/2)];
+  var spreadFraction = median > 0 ? mad / median : 1;
+  return { median: median, ok: spreadFraction <= MAX_WIDTH_SPREAD_FRACTION, spreadFraction: spreadFraction };
+}
+
+// ── Sanity checks — a detected "line" that's really noise (a green shirt,
+// a pink sign) shouldn't silently produce a confident-looking number. ──
+var MIN_LINE_PIXELS   = 25;   // below this, too little evidence to trust a fit
+var MIN_PLAUSIBLE_MM  = 300;  // narrower than this isn't a walkable footpath
+var MAX_PLAUSIBLE_MM  = 6000; // wider than this is almost certainly a bad detection
+
+// A real vanishing point for a photo of a path should sit above where the
+// two edge lines were actually detected (it's the horizon), and not be wildly
+// outside the frame horizontally — both are strong tells of a bad line fit
+// rather than a genuine (if extreme) camera angle.
+function vanishingPointLooksPlausible(vp, w, h, greenPts, pinkPts) {
+  var minDetectedY = Math.min.apply(null, greenPts.concat(pinkPts).map(function(p){return p.y;}));
+  if (vp.y >= minDetectedY) return false;
+  if (vp.x < -w || vp.x > 2*w) return false;
+  if (vp.y < -3*h) return false;
+  return true;
+}
+
+var _calCache = {};
+function fetchCalibrationForSurveyor(email) {
+  if (_calCache[email] !== undefined) return Promise.resolve(_calCache[email]);
+  return postToScript({ action:'getCalibration', surveyor: email })
+    .then(function(d) {
+      var cal = (d && d.eyeH && d.scaleFactor) ? { eyeH:d.eyeH, scaleFactor:d.scaleFactor } : null;
+      _calCache[email] = cal;
+      return cal;
+    })
+    .catch(function() { _calCache[email] = null; return null; });
+}
+
+function fetchPendingMeasurements() {
+  return postToScript({ action:'listMeasurements' }).then(function(d) { return (d && d.rows) || []; });
+}
+
+async function processMeasurementRow(row) {
+  if (!row.surveyor) throw new Error('no surveyor email on this row');
+  var cal = await fetchCalibrationForSurveyor(String(row.surveyor).trim().toLowerCase());
+  if (!cal) {
+    var err = new Error('no calibration on file for ' + row.surveyor + ' — ask them to calibrate (⚙ Calibrate) before re-running');
+    err.needsCalibration = true;
+    err.surveyor = row.surveyor;
+    throw err;
+  }
+
+  var fileId = driveFileIdFromUrl(row.annotated_image);
+  if (!fileId) throw new Error('could not read a Drive file ID from annotated_image');
+
+  var blob = await fetchDriveImageBlob(fileId);
+  var loaded = await loadImageFromBlob(blob);
+  var imageData = getImageDataFromImg(loaded.img);
+  URL.revokeObjectURL(loaded.url);
+
+  var greenPts = scanColouredPixels(imageData, isNeonGreen);
+  var pinkPts  = scanColouredPixels(imageData, isPinkEdge);
+  if (greenPts.length < MIN_LINE_PIXELS) throw new Error('too few neon-green pixels detected (' + greenPts.length + ') — check overlay colour/thresholds');
+  if (pinkPts.length  < MIN_LINE_PIXELS) throw new Error('too few pink pixels detected (' + pinkPts.length + ') — check overlay colour/thresholds');
+
+  var greenLine = robustFitLineXonY(greenPts);
+  var pinkLine  = robustFitLineXonY(pinkPts);
+  if (!greenLine) throw new Error('could not fit the neon-green line');
+  if (!pinkLine)  throw new Error('could not fit the pink line');
+
+  var vp = findVpMarker(imageData);
+  var vpSource = 'model marker';
+  if (!vp) {
+    vp = intersectLinesXonY(greenLine, pinkLine);
+    vpSource = 'line intersection';
+    if (!vp) throw new Error('green/pink lines look parallel — no vanishing point');
+    if (!vanishingPointLooksPlausible(vp, imageData.width, imageData.height, greenPts, pinkPts)) {
+      throw new Error('computed vanishing point (' + Math.round(vp.x) + ',' + Math.round(vp.y) + ') is outside a plausible range for this photo — likely a bad line detection, not a real width');
+    }
+  }
+
+  var rawResult = computeWidthFromDetectedLines(greenPts, pinkPts, greenLine, pinkLine, vp, cal.eyeH);
+  if (!rawResult.ok) {
+    throw new Error('width estimate is unstable across the image (spread ' + Math.round(rawResult.spreadFraction*100) + '%) — likely a noisy line detection, not writing it');
+  }
+  var widthMM = Math.round(rawResult.median * cal.scaleFactor);
+  if (widthMM < MIN_PLAUSIBLE_MM || widthMM > MAX_PLAUSIBLE_MM) {
+    throw new Error('computed width (' + widthMM + 'mm) is outside a plausible footpath range (' + MIN_PLAUSIBLE_MM + '–' + MAX_PLAUSIBLE_MM + 'mm) — not writing it');
+  }
+
+  await postToScript({ action:'updateMeasurementWidth', s_code: row.s_code, point_code: row.point_code, rowIndex: row.rowIndex, footpath_width_by_model: widthMM });
+  return { widthMM: widthMM, vpSource: vpSource };
+}
+
+function processLog(msg, cls) {
+  var el = document.getElementById('process-log');
+  var div = document.createElement('div');
+  div.style.color = cls === 'err' ? 'var(--danger)' : cls === 'ok' ? 'var(--success)' : 'var(--muted)';
+  div.textContent = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function runMeasurementsProcessing() {
+  document.getElementById('process-log').innerHTML = '';
+  if (!APPS_SCRIPT_URL) { processLog('Add your Apps Script URL in ⚙ Settings first.', 'err'); return; }
+  if (!gAccessToken) { processLog('Sign in with Google in ⚙ Settings first — needed to read images from Drive.', 'err'); return; }
+
+  processLog('Fetching pending rows from the Measurements sheet…');
+  var rows;
+  try { rows = await fetchPendingMeasurements(); }
+  catch (e) { processLog('Failed to fetch rows: ' + e.message, 'err'); return; }
+
+  if (!rows.length) { processLog('Nothing to do — every row already has footpath_width_by_model.', 'ok'); return; }
+  processLog('Found ' + rows.length + ' row(s) without footpath_width_by_model.');
+
+  var ok = 0, failed = 0;
+  var needCal = {}; // distinct surveyors flagged as missing calibration this run
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    processLog('Row ' + (i+1) + '/' + rows.length + ' — ' + (row.s_code||'?') + ' / ' + (row.point_code||'?') + '…');
+    try {
+      var result = await processMeasurementRow(row);
+      processLog('  → ' + result.widthMM + 'mm ✓ (vp: ' + result.vpSource + ')', 'ok');
+      ok++;
+    } catch (e) {
+      if (e.authExpired) {
+        processLog('  → Google sign-in expired mid-run — stopping here. Re-authenticate in ⚙ Settings and run again to continue with the remaining rows.', 'err');
+        break;
+      }
+      if (e.needsCalibration) needCal[e.surveyor] = true;
+      processLog('  → skipped: ' + e.message, 'err');
+      failed++;
+    }
+  }
+  var needCalList = Object.keys(needCal);
+  if (needCalList.length) {
+    processLog('Needs calibration before these rows can be processed — please ask: ' + needCalList.join(', '), 'err');
+  }
+  processLog('Done — ' + ok + ' updated, ' + failed + ' skipped.', ok ? 'ok' : 'err');
+}
+
+// ─── UTILS ─────────────────────────────────────────────────────────────────────
+function setStatus(msg,cls) {
+  var el=document.getElementById('status-msg');
+  el.textContent=msg;
+  el.className='status-msg'+(cls?' '+cls:'');
+}
+var _tt;
+function showToast(msg,type) {
+  var t=document.getElementById('toast');
+  t.textContent=msg;
+  t.className='toast show'+(type?' '+type:'');
+  clearTimeout(_tt);
+  _tt=setTimeout(function(){t.className='toast';},2600);
+}
+
+// ─── GOOGLE OAUTH + DIRECT DRIVE UPLOAD ───────────────────────────────────────
+function signInWithGoogle() {
+  var redirect = window.location.href.split('?')[0].split('#')[0];
+  var scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file');
+  var url = 'https://accounts.google.com/o/oauth2/v2/auth'
+    + '?client_id=' + encodeURIComponent(GOOGLE_CLIENT_ID)
+    + '&redirect_uri=' + encodeURIComponent(redirect)
+    + '&response_type=token'
+    + '&scope=' + scope
+    + '&prompt=consent';
+  window.location.href = url;
+}
+
+function silentRefreshToken() {
+  // Try to get a fresh token using prompt=none (silent, no user interaction)
+  // If user is already signed in to Google, this works without redirecting
+  var redirect = window.location.href.split('?')[0].split('#')[0];
+  var scope = encodeURIComponent('https://www.googleapis.com/auth/drive.file');
+  var url = 'https://accounts.google.com/o/oauth2/v2/auth'
+    + '?client_id=' + encodeURIComponent(GOOGLE_CLIENT_ID)
+    + '&redirect_uri=' + encodeURIComponent(redirect)
+    + '&response_type=token'
+    + '&scope=' + scope
+    + '&prompt=none';
+  var iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = url;
+  iframe.onload = function() {
+    try {
+      var hash = iframe.contentWindow.location.hash;
+      var params = {};
+      hash.substring(1).split('&').forEach(function(p) {
+        var kv = p.split('=');
+        params[kv[0]] = decodeURIComponent(kv[1] || '');
+      });
+      if (params.access_token) {
+        gAccessToken = params.access_token;
+        updateGoogleAuthStatus();
+      }
+    } catch(e) {}
+    document.body.removeChild(iframe);
+  };
+  document.body.appendChild(iframe);
+}
+
+function checkOAuthCallback() {
+  var hash = window.location.hash;
+  if (!hash) return;
+  var params = {};
+  hash.substring(1).split('&').forEach(function(p) {
+    var kv = p.split('=');
+    params[kv[0]] = decodeURIComponent(kv[1] || '');
+  });
+  if (params.access_token) {
+    gAccessToken = params.access_token;
+    history.replaceState(null, '', window.location.pathname);
+    updateGoogleAuthStatus();
+    showToast('Google account connected ✓', 'success');
+  }
+}
+
+function updateGoogleAuthStatus() {
+  var el = document.getElementById('google-auth-status');
+  var btn = document.getElementById('google-signin-btn');
+  if (!el) return;
+  if (gAccessToken) {
+    el.style.color = 'var(--success)';
+    el.textContent = '✓ Signed in — images will upload to Drive';
+    if (btn) btn.textContent = 'Re-authenticate';
+  } else {
+    el.style.color = 'var(--muted)';
+    el.textContent = "Not signed in — sign in with Google in Settings";
+  }
+}
+
+function uploadImageToDrive(name, base64data) {
+  if (!gAccessToken) throw new Error('Not signed in with Google');
+  var CRLF = '\r\n';
+  var boundary = 'fp_' + Date.now();
+  var metadata = JSON.stringify({ name: name, parents: [DRIVE_FOLDER_ID] });
+  // Build multipart body with correct CRLF line endings
+  var body = '--' + boundary + CRLF
+    + 'Content-Type: application/json; charset=UTF-8' + CRLF + CRLF
+    + metadata + CRLF
+    + '--' + boundary + CRLF
+    + 'Content-Type: image/jpeg' + CRLF
+    + 'Content-Transfer-Encoding: base64' + CRLF + CRLF
+    + base64data + CRLF
+    + '--' + boundary + '--';
+
+  return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + gAccessToken,
+      'Content-Type': 'multipart/related; boundary=' + boundary
+    },
+    body: body
+  })
+  .then(function(r) {
+    if (r.status === 401) {
+      gAccessToken = null;
+      updateGoogleAuthStatus();
+      // Show re-auth button directly in status
+      setStatus('Google token expired — <a onclick="openSettingsModal()" style="color:var(--accent);cursor:pointer;">tap here to sign in again</a>', 'err');
+      throw new Error('Token expired');
+    }
+    if (!r.ok) return r.text().then(function(t) { throw new Error('Drive error ' + r.status + ': ' + t); });
+    return r.json();
+  })
+  .then(function(d) {
+    // Make file public so it can be linked from the sheet
+    fetch('https://www.googleapis.com/drive/v3/files/' + d.id + '/permissions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + gAccessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'anyone', role: 'reader' })
+    });
+    return d;
+  });
+}
+
+// Keep old server upload as fallback
+function uploadImageToServer(serverUrl, name, base64data) {
+  var url = serverUrl.replace(/\/+$/, '') + '/upload';
+  return fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name, data: base64data, folderId: DRIVE_FOLDER_ID })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!d.ok) throw new Error(d.error || 'Server error');
+    return d;
+  });
+}
+
+function showDownloadBanner(rawB64, annB64, name) {
+  var el = document.getElementById('img-download-sec');
+  if (!el) return;
+  function dlLink(dataUrl, filename, label) {
+    if (!dataUrl) return '';
+    return '<a href="'+dataUrl+'" download="'+filename+'" style="display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--text);text-decoration:none;margin-right:8px;">⬇ '+label+'</a>';
+  }
+  el.style.display = 'block';
+  el.innerHTML = '<div style="background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px 14px;">'
+    + '<div style="font-size:11px;color:#93b4d8;margin-bottom:8px;">Save images to <a href="https://drive.google.com/drive/folders/1TJ3DiFYcMVRyX58CAh0LN5ZlEhyvXQXX" target="_blank" style="color:var(--accent);">Drive folder</a> manually:</div>'
+    + '<div>' + dlLink(rawB64, name+'_raw.jpg', 'Raw') + dlLink(annB64, name+'_annotated.jpg', 'Annotated') + '</div>'
+    + '</div>';
+}
+
+function hideDownloadBanner() {
+  var el = document.getElementById('img-download-sec');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
+// ─── SETTINGS ─────────────────────────────────────────────────────────────────
+function openSettingsModal() {
+  document.getElementById('script-url-input').value  = APPS_SCRIPT_URL    || '';
+  document.getElementById('image-server-input').value = IMAGE_SERVER_URL  || '';
+  document.getElementById('client-id-input').value    = GOOGLE_CLIENT_ID  || '';
+  document.getElementById('admin-email-input').value  = ADMIN_EMAIL       || '';
+  document.getElementById('conn-status').textContent = '';
+  updateGoogleAuthStatus();
+  document.getElementById('settings-modal').style.display = 'flex';
+}
+function saveScriptUrl() {
+  var scriptUrl  = document.getElementById('script-url-input').value.trim();
+  var imgUrl     = document.getElementById('image-server-input').value.trim();
+  var clientId   = document.getElementById('client-id-input').value.trim();
+  var adminEmail = document.getElementById('admin-email-input').value.trim();
+  APPS_SCRIPT_URL  = scriptUrl;
+  IMAGE_SERVER_URL = imgUrl;
+  GOOGLE_CLIENT_ID = clientId;
+  ADMIN_EMAIL      = adminEmail;
+  localStorage.setItem('fp_script_url', scriptUrl);
+  localStorage.setItem('fp_image_server_url', imgUrl);
+  localStorage.setItem('fp_google_client_id', clientId);
+  localStorage.setItem('fp_admin_email', adminEmail);
+  document.getElementById('setup-banner').style.display = scriptUrl ? 'none' : 'block';
+  updateProcessButtonVisibility();
+  closeModal('settings-modal');
+  showToast('Settings saved ✓', 'success');
+}
+// Shows the Process Measurements header icon only for the configured admin
+// email — a UI-level convenience, not real backend security (this is a
+// client-side app; anyone with dev tools could still call the functions
+// directly). Leaving ADMIN_EMAIL blank shows it to everyone.
+function updateProcessButtonVisibility() {
+  var btn = document.getElementById('btn-process-hdr');
+  if (!btn) return;
+  var isAdmin = !ADMIN_EMAIL || (U.email && U.email.trim().toLowerCase() === ADMIN_EMAIL.trim().toLowerCase());
+  btn.style.display = isAdmin ? 'flex' : 'none';
+}
+var REQUIRED_VERSION = 4;
+function testConnection() {
+  var url = document.getElementById('script-url-input').value.trim();
+  var statusEl = document.getElementById('conn-status');
+  if (!url) { statusEl.textContent = 'Enter a URL first.'; return; }
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = 'Testing connection…';
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'ping' }),
+    redirect: 'follow'
+  })
+  .then(function(r) { return r.text(); })
+  .then(function(text) {
+    try { return JSON.parse(text); } catch(e) { return { ok: true }; }
+  })
+  .then(function(d) {
+    if (d.version && d.version < REQUIRED_VERSION) {
+      statusEl.style.color = 'var(--warn)';
+      statusEl.textContent = '⚠ Script is v'+d.version+' — please redeploy with latest code (v'+REQUIRED_VERSION+' needed)';
+    } else {
+      statusEl.style.color = 'var(--success)';
+      statusEl.textContent = '✓ Connected — ' + (d.message || 'API running');
+    }
+  })
+  .catch(function(e) {
+    statusEl.style.color = 'var(--danger)';
+    statusEl.textContent = '✗ Failed: ' + e.message;
+  });
+}
+function openGuideModal() {
+  document.getElementById('cal-guide-modal').style.display = 'flex';
+}
+function closeModal(id, e) {
+  if (!e || e.target === document.getElementById(id))
+    document.getElementById(id).style.display = 'none';
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────────
+checkOAuthCallback();
+// Auto-refresh Google token every 45 minutes so user never has to sign in again
+setInterval(function() {
+  if (gAccessToken) silentRefreshToken();
+}, 45 * 60 * 1000);
+
+(function init(){
+  var saved=localStorage.getItem('fp_user');
+  if(saved){
+    try{
+      var u=JSON.parse(saved);
+      // Clear bad session where model was literally "Other (type below)"
+      if(!u.model || u.model==='Other (type below)' || u.model==='custom'){
+        localStorage.removeItem('fp_user');
+      } else {
+        U=u; startMain();
+      }
+    }
+    catch(ex){ localStorage.removeItem('fp_user'); }
+  }
+})();
+</script>
+</body>
+</html>
