@@ -2321,40 +2321,57 @@ function robustFitLineXonY(pts) {
   return fitLineXonY(filtered) || fit;
 }
 
-// The other model draws its own vanishing-point marker (a solid blue dot,
+// The other model draws its own vanishing-point marker — a solid dot,
 // arrived at via multi-line consensus — much sturdier than intersecting just
 // 2 detected lines, which can swing wildly off when the two lines happen to
-// be nearly parallel in a given shot). RGB(~10-40, ~50-75, ~200-235)
-// calibrated against real samples from test photos.
+// be nearly parallel in a given shot. Two annotation styles have shown up so
+// far: the fully-annotated version (segmentation masks + legend) uses a blue
+// dot, RGB(~10-40, ~50-75, ~200-235); the simpler "original photo" version
+// (just the 2 lines + dot, no legend) uses a yellow dot, RGB(~250,250,30).
+// Both calibrated against real sample photos.
 //
-// This same blue also appears in the legend's own "vanishing point" swatch,
-// which sits in a fixed bottom-right corner in both test photos — so that
-// corner is excluded from the search below. This is a positional assumption
-// about the legend, not something detected; if the other model ever moves
-// or resizes its legend, this exclusion box needs to move with it.
-function isVpBlue(r,g,b) { return r < 60 && g < 100 && b > 180 && (b - r) > 140; }
+// Blue also appears in the legend's own "vanishing point" swatch in the
+// fully-annotated style, sitting in a fixed bottom-right corner — so that
+// corner is excluded when searching for blue specifically. This is a
+// positional assumption about the legend, not something detected; if that
+// model ever moves/resizes its legend, this exclusion box needs to move
+// with it. The simpler yellow-dot style has no legend, so no exclusion is
+// needed there — confirmed clean (one tight cluster, no false positives
+// from real yellow signage/paint elsewhere in the photo) against a real
+// sample.
+function isVpBlue(r,g,b)   { return r < 60 && g < 100 && b > 180 && (b - r) > 140; }
+function isVpYellow(r,g,b) { return r > 200 && g > 200 && b < 100 && Math.abs(r - g) < 40; }
 var MIN_VP_MARKER_PIXELS  = 8;
-var MAX_VP_MARKER_SPAN_FR = 0.06; // marker cluster's bounding-box diagonal, as a fraction of image diagonal — real dot is tiny; anything bigger is scattered blue elsewhere (vehicles, sky, signage), not the marker
+var MAX_VP_MARKER_SPAN_FR = 0.06; // marker cluster's bounding-box diagonal, as a fraction of image diagonal — real dot is tiny; anything bigger is scattered colour elsewhere (vehicles, sky, signage), not the marker
 
-function findVpMarker(imageData) {
+function findMarkerByColor(imageData, matchFn, maxY) {
   var data = imageData.data, w = imageData.width, h = imageData.height;
-  var legendY = 0.78 * h; // exclude the legend's row-band entirely — see note above
+  var scanH = maxY !== undefined ? maxY : h;
   var xs = [], ys = [];
-  for (var y = 0; y < legendY; y++) {
+  for (var y = 0; y < scanH; y++) {
     for (var x = 0; x < w; x++) {
       var idx = (y * w + x) * 4;
-      if (isVpBlue(data[idx], data[idx+1], data[idx+2])) { xs.push(x); ys.push(y); }
+      if (matchFn(data[idx], data[idx+1], data[idx+2])) { xs.push(x); ys.push(y); }
     }
   }
   if (xs.length < MIN_VP_MARKER_PIXELS) return null;
   var minX=Math.min.apply(null,xs), maxX=Math.max.apply(null,xs);
-  var minY=Math.min.apply(null,ys), maxY=Math.max.apply(null,ys);
-  var span = Math.hypot(maxX-minX, maxY-minY);
+  var minY=Math.min.apply(null,ys), maxY2=Math.max.apply(null,ys);
+  var span = Math.hypot(maxX-minX, maxY2-minY);
   var imgDiag = Math.hypot(w, h);
   if (span > MAX_VP_MARKER_SPAN_FR * imgDiag) return null; // too spread out to be one dot
   var sx=0, sy=0;
   for (var i=0;i<xs.length;i++) { sx+=xs[i]; sy+=ys[i]; }
   return { x: sx/xs.length, y: sy/xs.length };
+}
+
+// Tries the yellow-dot style first (the "original photo" column), then the
+// blue-dot + legend-exclusion style (the fully-annotated column), so either
+// image type works without the caller needing to know which one it got.
+function findVpMarker(imageData) {
+  var yellow = findMarkerByColor(imageData, isVpYellow);
+  if (yellow) return yellow;
+  return findMarkerByColor(imageData, isVpBlue, 0.78 * imageData.height);
 }
 
 function intersectLinesXonY(a, b) {
@@ -2449,8 +2466,16 @@ async function processMeasurementRow(row) {
     throw err;
   }
 
-  var fileId = driveFileIdFromUrl(row.annotated_image);
-  if (!fileId) throw new Error('could not read a Drive file ID from annotated_image');
+  // Prefers the simpler "original photo" column (pink/green lines + a
+  // yellow vp dot, no legend clutter) when present, falling back to
+  // annotated_image for older rows. ASSUMPTION: the new column is named
+  // 'original_image' — I don't have the actual header text you used, so
+  // this needs correcting if that's wrong (see handleListMeasurements_ in
+  // apps_script_additions.gs, which is what actually needs to match your
+  // real header).
+  var imageUrl = row.original_image || row.annotated_image;
+  var fileId = driveFileIdFromUrl(imageUrl);
+  if (!fileId) throw new Error('could not read a Drive file ID from original_image/annotated_image');
 
   var blob = await fetchDriveImageBlob(fileId);
   var loaded = await loadImageFromBlob(blob);
