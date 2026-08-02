@@ -504,6 +504,30 @@ td.hi{color:white;font-weight:700;}
         </svg>
       </div>
     </div>
+    <!-- Pan controls — alternative to pinch-zoom for moving around a zoomed-in photo -->
+    <div id="pan-controls" style="display:none;position:absolute;top:64px;right:10px;pointer-events:auto;">
+      <div style="display:grid;grid-template-columns:30px 30px 30px;grid-template-rows:30px 30px 30px;gap:2px;">
+        <div></div>
+        <div onclick="panBy(0,70)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 5l-7 7h14z"/></svg>
+        </div>
+        <div></div>
+        <div onclick="panBy(70,0)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M5 12l7-7v14z"/></svg>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;">
+          <div style="width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.3);"></div>
+        </div>
+        <div onclick="panBy(-70,0)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M19 12l-7-7v14z"/></svg>
+        </div>
+        <div></div>
+        <div onclick="panBy(0,-70)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M12 19l7-7H5z"/></svg>
+        </div>
+        <div></div>
+      </div>
+    </div>
     <!-- Offset width display — shown only when property line is active -->
     <div id="offset-badge" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);pointer-events:none;">
       <div style="background:rgba(168,85,247,0.85);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;color:white;white-space:nowrap;">
@@ -518,18 +542,6 @@ td.hi{color:white;font-weight:700;}
         </svg>
       </div>
       <div class="side-tag"><span id="side-lbl">R</span></div>
-    </div>
-
-    <!-- A4-sheet calibration panel (Method 2) — shown only while marking -->
-    <div id="a4-panel" style="display:none;position:absolute;bottom:10px;left:10px;right:10px;pointer-events:auto;z-index:6;">
-      <div style="background:rgba(12,18,32,0.92);backdrop-filter:blur(8px);border:1px solid rgba(232,121,249,0.4);border-radius:12px;padding:12px 14px;">
-        <div id="a4-panel-text" style="font-size:12px;color:#f0f4f8;margin-bottom:10px;line-height:1.4;">Tap one edge of the A4 sheet.</div>
-        <div id="a4-panel-choices" style="display:none;gap:8px;">
-          <button onclick="confirmA4(210)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation;">Short edge · 210mm</button>
-          <button onclick="confirmA4(297)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:800;cursor:pointer;touch-action:manipulation;">Long edge · 297mm</button>
-        </div>
-        <button onclick="cancelA4Mode()" style="margin-top:8px;width:100%;background:transparent;border:1px solid rgba(255,255,255,0.15);color:#94a3b8;border-radius:8px;padding:7px;font-size:11px;cursor:pointer;touch-action:manipulation;font-family:inherit;">Cancel</button>
-      </div>
     </div>
   </div>
   <p class="hint" id="hint" style="display:none;">👆 tap a knob to lock it · drag to move</p>
@@ -755,6 +767,16 @@ td.hi{color:white;font-weight:700;}
       </div>
 
       <button class="btn-primary" style="width:100%;" onclick="startA4Mode()">Start Marking →</button>
+    </div>
+
+    <div id="cal-step-a4tap" style="display:none;">
+      <div style="font-size:18px;font-weight:800;margin-bottom:10px;">Mark the A4 sheet</div>
+      <div id="a4-panel-text" style="font-size:14px;color:var(--text);margin-bottom:14px;line-height:1.5;">Tap one edge of the A4 sheet in the photo above.</div>
+      <div id="a4-panel-choices" style="display:none;gap:8px;margin-bottom:10px;">
+        <button onclick="confirmA4(210)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;font-family:inherit;">Short edge · 210mm</button>
+        <button onclick="confirmA4(297)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;font-family:inherit;">Long edge · 297mm</button>
+      </div>
+      <button class="btn-secondary" style="width:100%;" onclick="cancelA4Mode()">Cancel</button>
     </div>
 
     <div id="cal-step-result" style="display:none;text-align:center;padding:24px 0 8px;">
@@ -1150,6 +1172,7 @@ function loadFile(e) {
       document.getElementById('ovr').style.display          = 'flex';
       document.getElementById('hint').style.display         = 'block';
       document.getElementById('prop-knob').style.display    = 'block';
+      document.getElementById('pan-controls').style.display = 'block';
       svg.style.display = 'block';
       S.imgLoaded = true;
       hideDownloadBanner();
@@ -1291,6 +1314,15 @@ function zoomBy(factor) {
   Z.tx = cx - (cx - Z.tx) * ns / Z.scale;
   Z.ty = cy - (cy - Z.ty) * ns / Z.scale;
   Z.scale = ns;
+  clampZoom(); applyZoom();
+}
+// Button-driven panning — same math as the drag-to-pan gesture, as a fallback
+// for anyone who finds pinch-to-zoom/pan awkward. A no-op at 1x zoom, since
+// clampZoom() pins tx/ty to 0 there regardless of what's added.
+function panBy(dx, dy) {
+  if (!S.W) return;
+  Z.tx += dx;
+  Z.ty += dy;
   clampZoom(); applyZoom();
 }
 
@@ -1998,6 +2030,7 @@ function resetForNext() {
   // Reset property line
   S.pActive=false; S.pLocked=false; S.pLockedExit=null; S.pLockedBx=null; S.pLockedZY=null;
   var pk=document.getElementById('prop-knob'); if(pk){pk.style.display='none';}
+  var pc=document.getElementById('pan-controls'); if(pc){pc.style.display='none';}
   var pkb=document.getElementById('prop-knob-btn');
   if(pkb){pkb.style.background='rgba(168,85,247,0.18)';pkb.style.border='2px dashed rgba(168,85,247,0.45)';}
   var oir=document.getElementById('offset-input-row'); if(oir){oir.style.display='none';}
@@ -2086,10 +2119,12 @@ function doCalibrate() {
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor!==1.0);
   syncCalibrationToSheet();
 }
+var CAL_STEP_IDS = ['cal-step-choose','cal-step-method1','cal-step-method2','cal-step-a4tap','cal-step-result'];
+function hideAllCalSteps() {
+  CAL_STEP_IDS.forEach(function(id) { document.getElementById(id).style.display = 'none'; });
+}
 function showCalResult() {
-  document.getElementById('cal-step-choose').style.display  = 'none';
-  document.getElementById('cal-step-method1').style.display = 'none';
-  document.getElementById('cal-step-method2').style.display = 'none';
+  hideAllCalSteps();
   document.getElementById('cal-step-result').style.display  = 'block';
   document.getElementById('cal-result-scale').textContent = S.scaleFactor.toFixed(3)+'×';
 }
@@ -2156,14 +2191,12 @@ function applyEyeHFromInput() {
   return S.eyeH;
 }
 // Switches which calibration-panel step is shown. 0 = back to the chooser,
-// 1 = known-width fields, 2 = the A4 instructions + Start Marking step
-// (folded in here now — previously a separate modal).
+// 1 = known-width fields, 2 = the A4 instructions + Start Marking step.
 function chooseCalMethod(n) {
-  document.getElementById('cal-step-choose').style.display  = n===0 ? 'block' : 'none';
-  document.getElementById('cal-step-method1').style.display = n===1 ? 'block' : 'none';
-  document.getElementById('cal-step-method2').style.display = n===2 ? 'block' : 'none';
-  document.getElementById('cal-step-result').style.display  = 'none';
-  if (n === 2) applyEyeHFromInput();
+  hideAllCalSteps();
+  if (n === 1) document.getElementById('cal-step-method1').style.display = 'block';
+  else if (n === 2) { document.getElementById('cal-step-method2').style.display = 'block'; applyEyeHFromInput(); }
+  else document.getElementById('cal-step-choose').style.display = 'block';
 }
 
 
@@ -2174,21 +2207,25 @@ function chooseCalMethod(n) {
 // current vp + eyeH) — it does NOT introduce a second, independent camera
 // model — so the two methods can never disagree with each other, only refine
 // the same scaleFactor.
+//
+// The tap-instructions/edge-choice UI lives in the panel below the photo
+// (cal-step-a4tap), not as an overlay on the photo itself — an earlier
+// on-photo version completely covered the zoom controls, which sat at the
+// same bottom-left corner. Only the small numbered tap markers (rendered in
+// redraw()) appear on the photo now.
 function startA4Mode() {
   if (!S.imgLoaded) { showToast('Load a photo first','error'); return; }
   applyEyeHFromInput();
-  document.getElementById('cal-panel').style.display = 'none';
   S.aMode = true;
   S.aPts = [];
-  document.getElementById('a4-panel').style.display = 'block';
+  hideAllCalSteps();
+  document.getElementById('cal-step-a4tap').style.display = 'block';
   updateA4Panel();
   redraw();
 }
 function cancelA4Mode() {
   S.aMode = false;
   S.aPts = [];
-  document.getElementById('a4-panel').style.display = 'none';
-  document.getElementById('cal-panel').style.display = 'block';
   chooseCalMethod(2);
   redraw();
 }
@@ -2206,7 +2243,7 @@ function updateA4Panel() {
   var choices = document.getElementById('a4-panel-choices');
   if (!txt || !choices) return;
   if (S.aPts.length === 0) {
-    txt.textContent = 'Tap one edge of the A4 sheet in the photo.';
+    txt.textContent = 'Tap one edge of the A4 sheet in the photo above.';
     choices.style.display = 'none';
   } else if (S.aPts.length === 1) {
     txt.textContent = 'Now tap the opposite edge of the same sheet.';
@@ -2230,11 +2267,9 @@ function confirmA4(knownMM) {
   var cal = { eyeH:S.eyeH, scaleFactor:S.scaleFactor };
   localStorage.setItem('fp_cal_' + U.model, JSON.stringify(cal));
   updateCalBadge();
-  redraw();
   S.aMode = false;
   S.aPts = [];
-  document.getElementById('a4-panel').style.display = 'none';
-  document.getElementById('cal-panel').style.display = 'block';
+  redraw();
   showCalResult();
   document.getElementById('cal-nudge').style.display = 'none';
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
