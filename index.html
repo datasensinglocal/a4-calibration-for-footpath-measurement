@@ -350,6 +350,12 @@ td.hi{color:white;font-weight:700;}
     </div>
 
     <div class="form-group">
+      <label class="form-label">Your Height (cm)</label>
+      <input class="form-input" id="l-height" type="number" placeholder="e.g. 170">
+      <span class="form-hint">Camera height is estimated as your height minus 15cm — recomputed fresh each login, not something you'll need to touch again in Calibrate</span>
+    </div>
+
+    <div class="form-group">
       <label class="form-label">Phone Model</label>
       <select class="form-select" id="l-model" onchange="modelChanged()">
         <option value="">Select model…</option>
@@ -688,21 +694,6 @@ td.hi{color:white;font-weight:700;}
         <strong>Camera height:</strong> <span id="cal-eyeh-lbl">1200 mm</span>
       </div>
 
-      <div class="form-group" style="margin-bottom:14px;">
-        <label class="form-label">Your Height (cm)</label>
-        <div style="display:flex;gap:8px;">
-          <input class="form-input" id="cal-height-input" type="number" placeholder="e.g. 170" style="flex:1;">
-          <button class="btn-secondary" style="flex:0 0 auto;padding:0 16px;" onclick="estimateEyeHFromHeight()">Estimate</button>
-        </div>
-        <span class="form-hint">Most people shoot at chest/elbow height, not eye level — this fills in a starting camera height below, which you can still fine-tune with either method.</span>
-      </div>
-
-      <div class="form-group" style="margin-bottom:14px;">
-        <label class="form-label">Camera Height (mm)</label>
-        <input class="form-input" id="cal-eyeh-input" type="number" placeholder="1200" value="1200">
-        <span class="form-hint">Auto-filled from your height above — adjust if your shooting height differs</span>
-      </div>
-
       <div class="divider" style="margin-bottom:14px;">Calibrate footpath scale</div>
       <div class="form-hint" style="margin-bottom:10px;display:block;">Choose how to set the scale for this phone:</div>
 
@@ -1000,29 +991,32 @@ function modelChanged() {
 var _knownName = null; // set by checkReturningSurveyor() when this email is already on file
 
 function doLogin() {
-  var name  = _knownName || document.getElementById('l-name').value.trim();
-  var phone = document.getElementById('l-phone').value.trim();
-  var email = document.getElementById('l-email').value.trim();
-  var model = document.getElementById('l-model').value;
+  var name   = _knownName || document.getElementById('l-name').value.trim();
+  var phone  = document.getElementById('l-phone').value.trim();
+  var email  = document.getElementById('l-email').value.trim();
+  var height = parseFloat(document.getElementById('l-height').value);
+  var model  = document.getElementById('l-model').value;
   if (model === 'custom') model = document.getElementById('l-model-custom').value.trim();
 
 
   if (!name)  { showToast('Enter your name','error'); return; }
   if (!phone) { showToast('Enter phone number','error'); return; }
   if (!email || email.indexOf('@') === -1) { showToast('Enter a valid email','error'); return; }
+  if (!height || height < 100 || height > 230) { showToast('Enter your height in cm, e.g. 170','error'); return; }
   if (!model) { showToast('Select phone model','error'); return; }
 
-  U = { name, phone, email, model, eyeH: 1200 };
+  U = { name, phone, email, model, heightCM: height, eyeH: computeEyeHFromHeightCM(height) };
   localStorage.setItem('fp_user', JSON.stringify(U));
-  syncSurveyorProfile({ name: name, phone: phone });
+  syncSurveyorProfile({ name: name, phone: phone, heightCM: height });
   startMain();
 }
 
 // Fired on the Email field's blur during login. If this email already has a
 // name on file (from a previous login, possibly on a different device), skip
 // re-asking for it — just show a welcome-back note and hide the Name field.
-// Fails silently and shows the Name field as normal if the lookup can't run
-// (offline, no Apps Script configured, brand-new surveyor).
+// Also prefills phone/height from that record if this device doesn't have
+// them yet. Fails silently and shows the Name field as normal if the lookup
+// can't run (offline, no Apps Script configured, brand-new surveyor).
 function checkReturningSurveyor() {
   var email = document.getElementById('l-email').value.trim();
   var nameGroup = document.getElementById('l-name-group');
@@ -1042,6 +1036,9 @@ function checkReturningSurveyor() {
         if (d.phone && !document.getElementById('l-phone').value) {
           document.getElementById('l-phone').value = d.phone;
         }
+        if (d.heightCM && !document.getElementById('l-height').value) {
+          document.getElementById('l-height').value = d.heightCM;
+        }
       }
     })
     .catch(function() { /* non-fatal — just show the Name field */ });
@@ -1058,9 +1055,11 @@ function startMain() {
   document.getElementById('hdr-user-name').textContent = U.name;
   updateProcessButtonVisibility();
 
-  // Load calibration for this phone model
+  // eyeH is always derived fresh from height (never cached per phone-model —
+  // see computeEyeHFromHeightCM). scaleFactor is the actual calibration
+  // correction and still loads from the per-model cache.
   var cal = JSON.parse(localStorage.getItem('fp_cal_' + U.model) || '{}');
-  S.eyeH        = cal.eyeH        || U.eyeH || 1200;
+  S.eyeH        = U.eyeH || 1200;
   S.scaleFactor = cal.scaleFactor || 1.0;
   updateCalBadge();
 
@@ -2016,9 +2015,7 @@ function openCalModal() {
   var cal=JSON.parse(localStorage.getItem('fp_cal_'+U.model)||'{}');
   document.getElementById('cal-phone-lbl').textContent = U.model;
   document.getElementById('cal-scale-lbl').textContent = (cal.scaleFactor||1).toFixed(3)+'×';
-  document.getElementById('cal-eyeh-lbl').textContent  = (cal.eyeH||U.eyeH||1200)+' mm';
-  document.getElementById('cal-eyeh-input').value      = cal.eyeH||U.eyeH||1200;
-  document.getElementById('cal-height-input').value    = U.heightCM || '';
+  document.getElementById('cal-eyeh-lbl').textContent  = S.eyeH+' mm';
   document.getElementById('cal-ref-input').value       = '';
   chooseCalMethod(0);
 }
@@ -2093,56 +2090,45 @@ function updateCalBadge() {
 }
 
 // ─── CAMERA HEIGHT FROM PERSON'S HEIGHT ───────────────────────────────────────
-// Rough heuristic only: people shooting footpath photos typically hold the
-// phone around chest/elbow height, not full eye level, and this app's own
-// long-standing default (1200mm) implies roughly that ratio for an average
-// adult. This just gives a starting point — Method 1 or Method 2 calibration
-// still does the real correction afterward.
-var CAMERA_HEIGHT_RATIO = 0.70;
-function estimateEyeHFromHeight() {
-  var heightCM = parseFloat(document.getElementById('cal-height-input').value);
-  if (!heightCM || heightCM < 100 || heightCM > 230) {
-    showToast('Enter your height in cm, e.g. 170','error');
-    return;
-  }
-  var estMM = Math.round(heightCM * 10 * CAMERA_HEIGHT_RATIO);
-  document.getElementById('cal-eyeh-input').value = estMM;
-  U.heightCM = heightCM;
-  localStorage.setItem('fp_user', JSON.stringify(U));
-  syncSurveyorProfile({ heightCM: heightCM });
-  showToast('Estimated ~' + estMM + 'mm — still fine-tune with a calibration below','info');
+// Camera height = person's height minus 15cm. Computed fresh from height at
+// every login (not cached per phone-model) — see startMain(). Method 1 or
+// Method 2 calibration still does the real scale correction afterward.
+var CAMERA_HEIGHT_OFFSET_CM = 15;
+function computeEyeHFromHeightCM(heightCM) {
+  return Math.round((heightCM - CAMERA_HEIGHT_OFFSET_CM) * 10);
 }
 // Upserts whichever fields are passed to the 'Surveyors' tab by email (see
-// apps_script_additions.gs) — name/phone from login, heightCM from the
-// estimator — so a surveyor's profile is remembered across devices/sessions
-// instead of being re-typed every time. Fields not passed are left as-is on
-// the sheet (the backend only overwrites what's actually provided).
+// apps_script_additions.gs) — name/phone/heightCM from login — so a
+// surveyor's profile is remembered across devices/sessions instead of being
+// re-typed every time. Fields not passed are left as-is on the sheet (the
+// backend only overwrites what's actually provided).
 function syncSurveyorProfile(fields) {
   if (!APPS_SCRIPT_URL || !U.email) return;
   var payload = Object.assign({ action:'logHeight', surveyor: U.email }, fields);
   postToScript(payload).catch(function() { /* non-fatal — local value still applies on this device */ });
 }
-// Looks up a previously-synced height for this email (e.g. on a new device
-// or after clearing local storage) and fills it in if we don't have one yet.
+// Looks up a previously-synced height for this email (e.g. on an existing
+// cached session from before height was required at login) and fills it in,
+// including recomputing eyeH from it, if this device doesn't have one yet.
 function fetchHeightIfMissing() {
   if (U.heightCM || !APPS_SCRIPT_URL || !U.email) return;
   postToScript({ action:'getHeight', surveyor: U.email })
     .then(function(d) {
       if (d && d.heightCM) {
         U.heightCM = d.heightCM;
+        U.eyeH = computeEyeHFromHeightCM(d.heightCM);
+        S.eyeH = U.eyeH;
         localStorage.setItem('fp_user', JSON.stringify(U));
       }
     })
     .catch(function() { /* non-fatal */ });
 }
-// Reads the Camera Height field and applies it to the live model — shared by
-// both doCalibrate() (Method 1) and confirmA4() (Method 2) so eyeH is always
-// in effect before either method computes its scaleFactor.
+// eyeH is set once at login (from height) and used as-is by both calibration
+// methods — there's no per-calibration eyeH input to read anymore, so this
+// is just a thin accessor kept so doCalibrate()/startA4Mode()/confirmA4()
+// didn't all need editing individually.
 function applyEyeHFromInput() {
-  var el = document.getElementById('cal-eyeh-input');
-  var v = parseInt(el && el.value) || S.eyeH || 1200;
-  S.eyeH = v;
-  return v;
+  return S.eyeH;
 }
 // Switches which calibration-panel step is shown. 0 = back to the chooser,
 // 1 = known-width fields, 2 = the A4 instructions + Start Marking step
