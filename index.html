@@ -479,8 +479,8 @@ td.hi{color:white;font-weight:700;}
     <!-- Zoom controls -->
     <div style="position:absolute;bottom:10px;left:10px;pointer-events:auto;display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
       <div style="display:flex;gap:6px;">
-        <div onclick="zoomBy(1.4)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-weight:700;color:white;touch-action:manipulation;">+</div>
-        <div onclick="zoomBy(1/1.4)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-weight:700;color:white;touch-action:manipulation;">−</div>
+        <div onclick="zoomBy(1.7)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-weight:700;color:white;touch-action:manipulation;">+</div>
+        <div onclick="zoomBy(1/1.7)" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:10px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;font-weight:700;color:white;touch-action:manipulation;">−</div>
       </div>
       <div id="zoom-reset" style="display:none;">
         <div onclick="resetZoom()" style="background:rgba(12,18,32,0.88);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:5px 12px;font-size:11px;font-weight:700;color:white;cursor:pointer;display:flex;align-items:center;gap:5px;touch-action:manipulation;">
@@ -763,7 +763,7 @@ td.hi{color:white;font-weight:700;}
       <div class="cal-steps">
         <div class="cal-step"><div class="step-num">1</div>Turn your phone to <strong style="color:var(--text);">portrait</strong> orientation — the app's perspective math assumes a portrait photo.</div>
         <div class="cal-step"><div class="step-num">2</div>Lay a sheet of A4 paper flat on the ground, <strong style="color:var(--text);">across the footpath</strong> (perpendicular to the direction you're walking), roughly in the lower-middle of the frame.</div>
-        <div class="cal-step"><div class="step-num">3</div>Take the photo with both edges of the sheet clearly visible, then tap "Start Marking" and tap the sheet's two edges directly on the photo above.</div>
+        <div class="cal-step"><div class="step-num">3</div>Take the photo with all 4 corners of the sheet clearly visible, then tap "Start Marking" and tap the corners in order: top-left, top-right, bottom-right, bottom-left.</div>
       </div>
 
       <button class="btn-primary" style="width:100%;" onclick="startA4Mode()">Start Marking →</button>
@@ -771,10 +771,12 @@ td.hi{color:white;font-weight:700;}
 
     <div id="cal-step-a4tap" style="display:none;">
       <div style="font-size:18px;font-weight:800;margin-bottom:10px;">Mark the A4 sheet</div>
-      <div id="a4-panel-text" style="font-size:14px;color:var(--text);margin-bottom:14px;line-height:1.5;">Tap one edge of the A4 sheet in the photo above.</div>
-      <div id="a4-panel-choices" style="display:none;gap:8px;margin-bottom:10px;">
-        <button onclick="confirmA4(210)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;font-family:inherit;">Short edge · 210mm</button>
-        <button onclick="confirmA4(297)" style="flex:1;background:#e879f9;color:#0c1220;border:none;border-radius:8px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;touch-action:manipulation;font-family:inherit;">Long edge · 297mm</button>
+      <div id="a4-panel-text" style="font-size:14px;color:var(--text);margin-bottom:10px;line-height:1.5;">Tap the top-left corner of the A4 sheet in the photo above.</div>
+      <div id="a4-panel-progress" style="display:flex;gap:6px;margin-bottom:14px;">
+        <span class="a4-dot" data-i="0" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></span>
+        <span class="a4-dot" data-i="1" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></span>
+        <span class="a4-dot" data-i="2" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></span>
+        <span class="a4-dot" data-i="3" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></span>
       </div>
       <button class="btn-secondary" style="width:100%;" onclick="cancelA4Mode()">Cancel</button>
     </div>
@@ -1223,21 +1225,53 @@ function widthMMRaw() {
 function widthMM() {
   return Math.round(widthMMRaw() * S.scaleFactor);
 }
-// Inverse of lineX: given an arbitrary tapped point (x,y), find the
-// "Bx" value (the x-intercept this same perspective ray would have at
-// the bottom of the frame) so it can be projected to any other row
-// with lineX() exactly like the building/kerb markers are.
-function bxFromXY(x, y) {
-  var d = y - S.vp.y;
-  return d ? S.vp.x + (x - S.vp.x) * (S.H - S.vp.y) / d : x;
+// ── A4 Method 2: solve vp + eyeH + scaleFactor directly from 4 tapped
+// corners (no dependency on the building/kerb vp being accurately placed
+// first). Tap order is TL, TR, BR, BL — the two long sides of the rectangle
+// (TL-BL and TR-BR) are parallel in reality, so their intersection in the
+// photo IS the vanishing point, the same principle used for the batch
+// Measurements pipeline's line-intersection vp. The two short sides
+// (TL-TR at the far depth, BL-BR at the near depth) are both the same
+// known 297mm — comparing how many pixels that same real length spans at
+// two different depths is what solves eyeH, no height guess involved.
+var A4_LONG_MM = 297;
+
+function lineThrough2Pts(a, b) {
+  var dy = b.y - a.y;
+  if (Math.abs(dy) < 1e-6) return null; // near-horizontal — can't solve meaningfully
+  var m = (b.x - a.x) / dy;
+  return { m: m, c: a.x - m * a.y };
 }
-// Raw (pre-scaleFactor) ground-plane distance between the two tapped
-// A4-sheet points, evaluated at their shared row — used by Method 2
-// calibration exactly the way widthMMRaw() is used by Method 1.
-function a4RawWidthAt(y) {
-  var x1 = lineX(bxFromXY(S.aPts[0].x, S.aPts[0].y), y);
-  var x2 = lineX(bxFromXY(S.aPts[1].x, S.aPts[1].y), y);
-  return Math.abs(toWorldMM(x1, y) - toWorldMM(x2, y));
+
+function solveA4Calibration(pts) {
+  // pts = [TL, TR, BR, BL]
+  var leftLine  = lineThrough2Pts(pts[0], pts[3]); // TL-BL
+  var rightLine = lineThrough2Pts(pts[1], pts[2]); // TR-BR
+  if (!leftLine || !rightLine) return null;
+  var vp = intersectLinesXonY(leftLine, rightLine);
+  if (!vp) return null;
+
+  var yFar  = (pts[0].y + pts[1].y) / 2;
+  var yNear = (pts[2].y + pts[3].y) / 2;
+  if (yFar <= vp.y || yNear <= vp.y) return null; // vp should sit above both tapped edges
+
+  var pxFar  = Math.abs(pts[1].x - pts[0].x);
+  var pxNear = Math.abs(pts[2].x - pts[3].x);
+  if (pxFar <= 0 || pxNear <= 0) return null;
+
+  // Each edge alone implies an eyeH (297mm = pxAtThatDepth * eyeH/(y-vp.y));
+  // averaging the two is more robust than trusting either edge alone.
+  var eyeHFar  = A4_LONG_MM * (yFar  - vp.y) / pxFar;
+  var eyeHNear = A4_LONG_MM * (yNear - vp.y) / pxNear;
+  var eyeH = Math.round((eyeHFar + eyeHNear) / 2);
+
+  function toWorldMMLocal(sx, sy) { return sy <= vp.y ? 0 : (sx - vp.x) * (eyeH / (sy - vp.y)); }
+  var rawFar  = Math.abs(toWorldMMLocal(pts[1].x, yFar)  - toWorldMMLocal(pts[0].x, yFar));
+  var rawNear = Math.abs(toWorldMMLocal(pts[2].x, yNear) - toWorldMMLocal(pts[3].x, yNear));
+  var avgRaw = (rawFar + rawNear) / 2;
+  if (!(avgRaw > 0)) return null;
+
+  return { eyeH: eyeH, scaleFactor: A4_LONG_MM / avgRaw, vp: vp };
 }
 function exitPoint(bx) {
   var sl = (bx - S.vp.x) / (S.H - S.vp.y);
@@ -1335,6 +1369,7 @@ function onPD(e) {
   var idsBefore = Object.keys(_ptrs).length; // count BEFORE this pointer joins
   _ptrs[e.pointerId] = raw;
   var ids = Object.keys(_ptrs);
+  try { e.target.setPointerCapture(e.pointerId); } catch(ex) {} // capture every pointer, not just single-finger drags — pinch fingers need this too for reliable tracking
 
   if (ids.length >= 2) {
     // Two fingers — start pinch, cancel any handle drag
@@ -1377,7 +1412,6 @@ function onPD(e) {
   else                                                                         S.drag = Z.scale>1.05 ? 'pan' : null;
 
   if (!S.drag) return;
-  try { e.target.setPointerCapture(e.pointerId); } catch(ex) {}
   S._lp = p; S._rawLp = raw;
 }
 
@@ -1386,12 +1420,14 @@ function onPM(e) {
   _ptrs[e.pointerId] = raw;
   var ids = Object.keys(_ptrs);
 
-  // ── Pinch zoom ──
+  // ── Pinch zoom ── (exponent >1 makes it respond more per mm of finger movement — more sensitive than a plain 1:1 distance ratio)
   if (ids.length >= 2 && _pinch0) {
     e.preventDefault();
     var pa=_ptrs[ids[0]], pb=_ptrs[ids[1]];
     var dist=pDist(pa,pb), mid=pMid(pa,pb);
-    var ns = Math.max(1, Math.min(6, _pinch0.Z.scale * dist / _pinch0.dist));
+    var PINCH_SENSITIVITY = 1.8;
+    var ratio = Math.pow(dist / _pinch0.dist, PINCH_SENSITIVITY);
+    var ns = Math.max(1, Math.min(6, _pinch0.Z.scale * ratio));
     var cx = (_pinch0.mid.x - _pinch0.Z.tx) / _pinch0.Z.scale;
     var cy = (_pinch0.mid.y - _pinch0.Z.ty) / _pinch0.Z.scale;
     Z.scale=ns; Z.tx=mid.x-cx*ns; Z.ty=mid.y-cy*ns;
@@ -1690,18 +1726,23 @@ function redraw() {
   }
   } // end !S.aMode guard
 
-  // ── A4 calibration points (Method 2) — plain tapped markers, no perspective lines ──
+  // ── A4 calibration points (Method 2) — connects taps as a rectangle outline in tap order (TL→TR→BR→BL→close), so a mis-tap shows up as a visibly crossed shape ──
   if (S.aMode && S.aPts.length) {
+    var n = S.aPts.length;
+    for (var ai = 1; ai < n; ai++) {
+      u+='<line x1="'+S.aPts[ai-1].x+'" y1="'+S.aPts[ai-1].y+'" x2="'+S.aPts[ai].x+'" y2="'+S.aPts[ai].y
+        +'" stroke="#e879f9" stroke-width="'+sw_width+'" stroke-dasharray="'+dash_w+'"/>';
+    }
+    if (n === 4) {
+      u+='<line x1="'+S.aPts[3].x+'" y1="'+S.aPts[3].y+'" x2="'+S.aPts[0].x+'" y2="'+S.aPts[0].y
+        +'" stroke="#e879f9" stroke-width="'+sw_width+'" stroke-dasharray="'+dash_w+'"/>';
+    }
     S.aPts.forEach(function(pt, idx){
       u+='<g transform="translate('+pt.x.toFixed(1)+','+pt.y.toFixed(1)+') scale('+sc+')">'
         +'<circle r="14" fill="#e879f9" stroke="white" stroke-width="2.5"/>'
         +'<text x="0" y="5" font-size="14" font-weight="800" fill="#0c1220" text-anchor="middle">'+(idx+1)+'</text>'
         +'</g>';
     });
-    if (S.aPts.length === 2) {
-      u+='<line x1="'+S.aPts[0].x+'" y1="'+S.aPts[0].y+'" x2="'+S.aPts[1].x+'" y2="'+S.aPts[1].y
-        +'" stroke="#e879f9" stroke-width="'+sw_width+'" stroke-dasharray="'+dash_w+'"/>';
-    }
   }
 
   document.getElementById('g-ui').innerHTML=u;
@@ -2185,8 +2226,7 @@ function fetchHeightIfMissing() {
 }
 // eyeH is set once at login (from height) and used as-is by both calibration
 // methods — there's no per-calibration eyeH input to read anymore, so this
-// is just a thin accessor kept so doCalibrate()/startA4Mode()/confirmA4()
-// didn't all need editing individually.
+// is just a thin accessor kept so doCalibrate()/startA4Mode() didn't need editing individually.
 function applyEyeHFromInput() {
   return S.eyeH;
 }
@@ -2213,6 +2253,8 @@ function chooseCalMethod(n) {
 // on-photo version completely covered the zoom controls, which sat at the
 // same bottom-left corner. Only the small numbered tap markers (rendered in
 // redraw()) appear on the photo now.
+var A4_CORNER_LABELS = ['top-left', 'top-right', 'bottom-right', 'bottom-left'];
+
 function startA4Mode() {
   if (!S.imgLoaded) { showToast('Load a photo first','error'); return; }
   applyEyeHFromInput();
@@ -2230,40 +2272,42 @@ function cancelA4Mode() {
   redraw();
 }
 function placeA4Point(p) {
-  if (S.aPts.length < 2) {
+  if (S.aPts.length < 4) {
     S.aPts.push({ x:p.x, y:p.y });
   } else {
-    S.aPts = [{ x:p.x, y:p.y }]; // third tap restarts
+    S.aPts = [{ x:p.x, y:p.y }]; // 5th tap restarts
   }
   updateA4Panel();
   redraw();
+  if (S.aPts.length === 4) finishA4Tapping();
 }
 function updateA4Panel() {
   var txt = document.getElementById('a4-panel-text');
-  var choices = document.getElementById('a4-panel-choices');
-  if (!txt || !choices) return;
-  if (S.aPts.length === 0) {
-    txt.textContent = 'Tap one edge of the A4 sheet in the photo above.';
-    choices.style.display = 'none';
-  } else if (S.aPts.length === 1) {
-    txt.textContent = 'Now tap the opposite edge of the same sheet.';
-    choices.style.display = 'none';
+  if (!txt) return;
+  var n = S.aPts.length;
+  if (n < 4) {
+    txt.textContent = 'Tap the ' + A4_CORNER_LABELS[n] + ' corner of the A4 sheet in the photo above.';
   } else {
-    txt.textContent = 'Which edge of the sheet did you mark?';
-    choices.style.display = 'flex';
+    txt.textContent = 'Calculating…';
   }
+  document.querySelectorAll('#a4-panel-progress .a4-dot').forEach(function(dot, i) {
+    dot.style.background = i < n ? '#e879f9' : 'var(--border)';
+  });
 }
-function confirmA4(knownMM) {
-  if (S.aPts.length < 2) return;
-  applyEyeHFromInput();
-  var y = (S.aPts[0].y + S.aPts[1].y) / 2;
-  var raw = a4RawWidthAt(y);
-  if (!(raw > 0)) {
-    showToast('Could not calibrate — tap two distinct points','error');
-    cancelA4Mode();
+// Runs automatically once all 4 corners are tapped — no follow-up question
+// needed, since which edges are which (297mm across, 210mm along the path)
+// is already fixed by the tap order and the placement instructions.
+function finishA4Tapping() {
+  var result = solveA4Calibration(S.aPts);
+  if (!result) {
+    showToast('Could not calibrate — corners don\'t form a usable rectangle, try again','error');
+    S.aPts = [];
+    updateA4Panel();
+    redraw();
     return;
   }
-  S.scaleFactor = knownMM / raw;
+  S.eyeH = result.eyeH;
+  S.scaleFactor = result.scaleFactor;
   var cal = { eyeH:S.eyeH, scaleFactor:S.scaleFactor };
   localStorage.setItem('fp_cal_' + U.model, JSON.stringify(cal));
   updateCalBadge();
