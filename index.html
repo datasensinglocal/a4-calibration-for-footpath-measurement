@@ -728,7 +728,7 @@ td.hi{color:white;font-weight:700;}
       <div class="form-group">
         <label class="form-label">Known Reference Width (mm)</label>
         <input class="form-input" id="cal-ref-input" type="number" placeholder="e.g. 600">
-        <span class="form-hint">Leave blank to update camera height only</span>
+        <span class="form-hint">If you've also done Method 2, this gets averaged with it for a more robust scale</span>
       </div>
       <button class="btn-primary" style="width:100%;" onclick="doCalibrate()">Apply Calibration</button>
     </div>
@@ -776,7 +776,8 @@ td.hi{color:white;font-weight:700;}
     <div id="cal-step-result" style="display:none;text-align:center;padding:24px 0 8px;">
       <div style="font-size:40px;margin-bottom:10px;">✅</div>
       <div style="font-size:18px;font-weight:800;color:var(--success);margin-bottom:6px;">Calibrated ✓</div>
-      <div style="font-size:14px;color:var(--muted);margin-bottom:22px;">Scale factor: <strong id="cal-result-scale" style="color:var(--text);">1.000×</strong></div>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:8px;">Scale factor: <strong id="cal-result-scale" style="color:var(--text);">1.000×</strong></div>
+      <div id="cal-result-detail" style="display:none;font-size:12px;color:var(--muted);margin-bottom:22px;line-height:1.5;"></div>
       <button class="btn-primary" style="width:100%;" onclick="backToMeasurement()">Test Measurement →</button>
     </div>
 
@@ -988,7 +989,7 @@ var S = {
   wLocked:false, kLocked:false,
   // Property line (building offset) — activated by tapping corner knob
   pActive:false, pBx:0, pZY:0, pLocked:false, pLockedExit:null, pLockedBx:null, pLockedZY:null,
-  eyeH:1200, scaleFactor:1.0, focal:0,
+  eyeH:1200, scaleFactor:1.0, calMethod1:null, calMethod2:null, focal:0,
   drag:null, _lp:{x:0,y:0}, startP:{x:0,y:0}, moved:false,
   // A4-sheet calibration mode (Method 2) — two tapped points on the sheet's edges
   aMode:false, aPts:[],
@@ -1072,11 +1073,15 @@ function startMain() {
   updateProcessButtonVisibility();
 
   // eyeH is always derived fresh from height (never cached per phone-model —
-  // see computeEyeHFromHeightCM). scaleFactor is the actual calibration
-  // correction and still loads from the per-model cache.
+  // see computeEyeHFromHeightCM). Method 1 and Method 2 each store their own
+  // scaleFactor independently; the active one is their average when both
+  // exist, so a person can add either method (or both) without one silently
+  // overwriting the other.
   var cal = JSON.parse(localStorage.getItem('fp_cal_' + U.model) || '{}');
-  S.eyeH        = U.eyeH || 1200;
-  S.scaleFactor = cal.scaleFactor || 1.0;
+  S.eyeH = U.eyeH || 1200;
+  S.calMethod1 = cal.method1 || null;
+  S.calMethod2 = cal.method2 || null;
+  S.scaleFactor = computeActiveScaleFactor();
   updateCalBadge();
 
   // Show setup banner if no Apps Script configured
@@ -1211,15 +1216,23 @@ function widthMMRaw() {
 function widthMM() {
   return Math.round(widthMMRaw() * S.scaleFactor);
 }
-// ── A4 Method 2: solve vp + eyeH + scaleFactor directly from 4 tapped
-// corners (no dependency on the building/kerb vp being accurately placed
-// first). Tap order is TL, TR, BR, BL — the two long sides of the rectangle
-// (TL-BL and TR-BR) are parallel in reality, so their intersection in the
-// photo IS the vanishing point, the same principle used for the batch
-// Measurements pipeline's line-intersection vp. The two short sides
-// (TL-TR at the far depth, BL-BR at the near depth) are both the same
-// known 297mm — comparing how many pixels that same real length spans at
-// two different depths is what solves eyeH, no height guess involved.
+// ── A4 Method 2: solve vp + scaleFactor from 4 tapped corners. Tap order is
+// TL, TR, BR, BL — the two long sides of the rectangle (TL-BL and TR-BR) are
+// parallel in reality, so their intersection in the photo IS the vanishing
+// point, the same principle used for the batch Measurements pipeline's
+// line-intersection vp. This is the piece that genuinely needs an accurate
+// baseline — a single A4 sheet's short edges make for a noisy vp estimate,
+// which is why laying multiple sheets end-to-end (stacked in the direction
+// of travel) before tapping is worth doing: it lengthens these same two
+// lines without changing any of this math.
+//
+// eyeH is NOT solved from the sheet's two depths anymore — it uses the
+// stable login-derived S.eyeH instead. Turned out unnecessary: an eyeH error
+// is a pure multiplicative constant in the width formula, and a scaleFactor
+// fit from a known width cancels that constant exactly regardless of where
+// eyeH came from — it doesn't need to be independently accurate. Solving it
+// from the sheet's two depths just added noise (a small, nearby baseline)
+// for no actual accuracy benefit.
 var A4_LONG_MM = 297;
 
 function lineThrough2Pts(a, b) {
@@ -1245,19 +1258,14 @@ function solveA4Calibration(pts) {
   var pxNear = Math.abs(pts[2].x - pts[3].x);
   if (pxFar <= 0 || pxNear <= 0) return null;
 
-  // Each edge alone implies an eyeH (297mm = pxAtThatDepth * eyeH/(y-vp.y));
-  // averaging the two is more robust than trusting either edge alone.
-  var eyeHFar  = A4_LONG_MM * (yFar  - vp.y) / pxFar;
-  var eyeHNear = A4_LONG_MM * (yNear - vp.y) / pxNear;
-  var eyeH = Math.round((eyeHFar + eyeHNear) / 2);
-
+  var eyeH = S.eyeH;
   function toWorldMMLocal(sx, sy) { return sy <= vp.y ? 0 : (sx - vp.x) * (eyeH / (sy - vp.y)); }
   var rawFar  = Math.abs(toWorldMMLocal(pts[1].x, yFar)  - toWorldMMLocal(pts[0].x, yFar));
   var rawNear = Math.abs(toWorldMMLocal(pts[2].x, yNear) - toWorldMMLocal(pts[3].x, yNear));
-  var avgRaw = (rawFar + rawNear) / 2;
+  var avgRaw = (rawFar + rawNear) / 2; // averaging both edges' implied scale is a free noise reduction
   if (!(avgRaw > 0)) return null;
 
-  return { eyeH: eyeH, scaleFactor: A4_LONG_MM / avgRaw, vp: vp };
+  return { scaleFactor: A4_LONG_MM / avgRaw, vp: vp };
 }
 function exitPoint(bx) {
   var sl = (bx - S.vp.x) / (S.H - S.vp.y);
@@ -2101,9 +2109,8 @@ function hideMeasurementSections() {
 function openCalModal() {
   hideMeasurementSections();
   document.getElementById('cal-panel').style.display = 'block';
-  var cal=JSON.parse(localStorage.getItem('fp_cal_'+U.model)||'{}');
   document.getElementById('cal-phone-lbl').textContent = U.model;
-  document.getElementById('cal-scale-lbl').textContent = (cal.scaleFactor||1).toFixed(3)+'×';
+  document.getElementById('cal-scale-lbl').textContent = S.scaleFactor.toFixed(3)+'×';
   document.getElementById('cal-eyeh-lbl').textContent  = S.eyeH+' mm';
   document.getElementById('cal-ref-input').value       = '';
   chooseCalMethod(0);
@@ -2121,34 +2128,46 @@ function closeCalModal() { backToMeasurement(); }
 // in the same sheet (via a new Apps Script action — see apps_script_additions.gs)
 // so the Measurements-processing pipeline can look up a surveyor's scale by
 // email, from any device, without needing their phone's localStorage.
+// The active scaleFactor is the average of whichever methods have been
+// completed for this phone — both if both exist, otherwise just the one.
+// Uncalibrated (neither done) falls back to 1.0.
+function computeActiveScaleFactor() {
+  var vals = [];
+  if (S.calMethod1) vals.push(S.calMethod1);
+  if (S.calMethod2) vals.push(S.calMethod2);
+  if (!vals.length) return 1.0;
+  return vals.reduce(function(a,b){ return a+b; }, 0) / vals.length;
+}
+// Shared by both methods: persists whichever of S.calMethod1/S.calMethod2 was
+// just set (the other is left untouched), recomputes the active scaleFactor,
+// and shows the result step.
+function saveCalibrationAndShowResult() {
+  S.scaleFactor = computeActiveScaleFactor();
+  localStorage.setItem('fp_cal_' + U.model, JSON.stringify({ method1: S.calMethod1, method2: S.calMethod2 }));
+  updateCalBadge();
+  if (S.imgLoaded) redraw();
+  showCalResult();
+  document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
+  syncCalibrationToSheet();
+}
 function syncCalibrationToSheet() {
   if (!APPS_SCRIPT_URL || !U.email) return;
   postToScript({ action:'logCalibration', row: {
-    surveyor: U.email, model: U.model, eyeH: S.eyeH, scaleFactor: S.scaleFactor,
-    time: new Date().toISOString()
+    surveyor: U.email, model: U.model, eyeH: S.eyeH,
+    method1ScaleFactor: S.calMethod1, method2ScaleFactor: S.calMethod2,
+    scaleFactor: S.scaleFactor, time: new Date().toISOString()
   }}).catch(function() { /* non-fatal — local calibration still applies on this device */ });
 }
 
 function doCalibrate() {
-  var newEyeH = applyEyeHFromInput();
-  var refMM   = parseFloat(document.getElementById('cal-ref-input').value);
-
-  if(refMM){
-    if(!S.imgLoaded){
-      showToast('Load image & position lines first','error');
-      return;
-    }
-    var raw=widthMMRaw();
-    if(raw>0) S.scaleFactor=refMM/raw;
-  }
-
-  var cal={eyeH:newEyeH,scaleFactor:S.scaleFactor};
-  localStorage.setItem('fp_cal_'+U.model,JSON.stringify(cal));
-  updateCalBadge();
-  if(S.imgLoaded) redraw();
-  showCalResult();
-  document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor!==1.0);
-  syncCalibrationToSheet();
+  applyEyeHFromInput();
+  var refMM = parseFloat(document.getElementById('cal-ref-input').value);
+  if (!refMM) { showToast('Enter the known width','error'); return; }
+  if (!S.imgLoaded) { showToast('Load image & position lines first','error'); return; }
+  var raw = widthMMRaw();
+  if (!(raw > 0)) { showToast('Could not compute a width — check the lines are positioned','error'); return; }
+  S.calMethod1 = refMM / raw;
+  saveCalibrationAndShowResult();
 }
 var CAL_STEP_IDS = ['cal-step-choose','cal-step-method1','cal-step-method2','cal-step-a4tap','cal-step-result'];
 function hideAllCalSteps() {
@@ -2156,13 +2175,27 @@ function hideAllCalSteps() {
 }
 function showCalResult() {
   hideAllCalSteps();
-  document.getElementById('cal-step-result').style.display  = 'block';
+  document.getElementById('cal-step-result').style.display = 'block';
   document.getElementById('cal-result-scale').textContent = S.scaleFactor.toFixed(3)+'×';
+  var detail = document.getElementById('cal-result-detail');
+  if (S.calMethod1 && S.calMethod2) {
+    detail.textContent = 'Averaged — Method 1: ' + S.calMethod1.toFixed(3) + '×, Method 2: ' + S.calMethod2.toFixed(3) + '×';
+    detail.style.display = 'block';
+  } else if (S.calMethod1) {
+    detail.textContent = 'From Method 1 only — add Method 2 too for a more robust average';
+    detail.style.display = 'block';
+  } else if (S.calMethod2) {
+    detail.textContent = 'From Method 2 only — add Method 1 too for a more robust average';
+    detail.style.display = 'block';
+  } else {
+    detail.style.display = 'none';
+  }
 }
 function resetCal() {
   if(!confirm('Reset calibration for '+U.model+'?')) return;
-  S.scaleFactor=1.0;
-  S.eyeH=U.eyeH||1200;
+  S.calMethod1 = null;
+  S.calMethod2 = null;
+  S.scaleFactor = 1.0;
   localStorage.removeItem('fp_cal_'+U.model);
   updateCalBadge();
   if(S.imgLoaded) redraw();
@@ -2171,7 +2204,7 @@ function resetCal() {
   document.getElementById('btn-cal-hdr').classList.remove('active');
 }
 function updateCalBadge() {
-  var calibrated = S.scaleFactor !== 1.0;
+  var calibrated = !!(S.calMethod1 || S.calMethod2);
   var un = document.getElementById('cal-status-uncalibrated');
   var cal = document.getElementById('cal-status-calibrated');
   if (un)  un.style.display  = calibrated ? 'none' : 'flex';
@@ -2297,17 +2330,11 @@ function finishA4Tapping() {
     redraw();
     return;
   }
-  S.eyeH = result.eyeH;
-  S.scaleFactor = result.scaleFactor;
-  var cal = { eyeH:S.eyeH, scaleFactor:S.scaleFactor };
-  localStorage.setItem('fp_cal_' + U.model, JSON.stringify(cal));
-  updateCalBadge();
+  S.calMethod2 = result.scaleFactor;
   S.aMode = false;
   S.aPts = [];
   redraw();
-  showCalResult();
-  document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
-  syncCalibrationToSheet();
+  saveCalibrationAndShowResult();
 }
 
 // ─── EXPORT CSV ────────────────────────────────────────────────────────────────
