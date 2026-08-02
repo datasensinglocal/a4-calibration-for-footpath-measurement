@@ -1300,20 +1300,29 @@ function pMid(a,b) { return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
 // ─── POINTER EVENTS ────────────────────────────────────────────────────────────
 function onPD(e) {
   var raw = svgRaw(e);
+  var idsBefore = Object.keys(_ptrs).length; // count BEFORE this pointer joins
   _ptrs[e.pointerId] = raw;
   var ids = Object.keys(_ptrs);
 
   if (ids.length >= 2) {
     // Two fingers — start pinch, cancel any handle drag
     S.drag = null;
+    S._aWasPinch = true; // this gesture involved 2+ fingers — never treat it as an A4 tap
     var pa=_ptrs[ids[0]], pb=_ptrs[ids[1]];
     _pinch0 = { dist:pDist(pa,pb), mid:pMid(pa,pb), Z:{scale:Z.scale,tx:Z.tx,ty:Z.ty} };
     return;
   }
 
-  // A4 calibration mode — plain tap-to-place, bypasses handle dragging entirely
+  // A4 calibration mode — record where the finger went down, but don't
+  // commit to placing a point yet. If this is genuinely a tap (not the
+  // first finger of a pinch), it gets placed on pointer-up instead — that
+  // gives a second finger arriving shortly after room to be recognized as
+  // a pinch, rather than the first touch being swallowed as a tap the
+  // instant it lands.
   if (S.aMode) {
-    placeA4Point(toContent(raw));
+    if (idsBefore === 0) S._aWasPinch = false; // first finger of a fresh gesture
+    S._aTapPoint = toContent(raw);
+    S._t = Date.now();
     return;
   }
 
@@ -1406,6 +1415,14 @@ function onPU(e) {
   // Tap = any touch under 600ms (time-only, no movement penalty)
   var isTap = (Date.now() - S._t) < 600;
 
+  if (S.aMode) {
+    if (isTap && !S._aWasPinch && S._aTapPoint && Object.keys(_ptrs).length === 0) {
+      placeA4Point(S._aTapPoint);
+    }
+    S._aTapPoint = null;
+    return;
+  }
+
   if (S.drag && S.drag!=='pan' && isTap) {
     if (S.drag==='vp') {
       S.vp.locked = !S.vp.locked;
@@ -1471,15 +1488,21 @@ function redraw() {
   var sc = isc.toFixed(4); // used by both the guarded building/kerb overlay and the always-rendered A4 points below
   var sw_width = (2.0*isc).toFixed(2);
   var dash_w   = (4*isc)+' '+(3*isc);
+  // The Building-edge/Kerb-edge/VP overlay is only meaningful during normal
+  // measurement — hide it for the whole calibration flow (not just active A4
+  // tapping), since a leftover overlay from before is confusing clutter on
+  // top of whatever the calibration step is actually asking the person to do.
+  var calPanelEl = document.getElementById('cal-panel');
+  var inCalFlow = S.aMode || (calPanelEl && calPanelEl.style.display !== 'none');
 
-  // Frame outline — counter-scaled stroke (hidden during A4 marking, see below)
+  // Frame outline — counter-scaled stroke (hidden during calibration, see above)
   var frameEl = document.getElementById('g-frame');
-  frameEl.setAttribute('d', S.aMode ? '' : framePath(p0,p1));
+  frameEl.setAttribute('d', inCalFlow ? '' : framePath(p0,p1));
   frameEl.setAttribute('stroke-width', (5*isc).toFixed(2));
 
   // depth grid — counter-scaled stroke
   var grid='';
-  if (!S.aMode) {
+  if (!inCalFlow) {
     for(var z=1000;z<=12000;z+=1000){
       var py=S.vp.y+(S.focal*S.eyeH/z);
       if(py>S.vp.y&&py<=S.H)
@@ -1494,7 +1517,7 @@ function redraw() {
   var wLX=bLeft?32:-(wLW+32);
   var kLX=bLeft?-(kLW+32):32;
   var u='';
-  if (!S.aMode) {
+  if (!inCalFlow) {
 
   // XSZ stays constant on screen — scale by isc in content space
   var XSZ = 12*isc;
@@ -2001,6 +2024,7 @@ function showMeasurementSections() {
   document.getElementById('submit-sec-el').style.display = 'block';
   document.getElementById('cal-status-box').style.display = 'block';
   document.getElementById('cal-panel').style.display = 'none';
+  if (S.imgLoaded) redraw();
 }
 function hideMeasurementSections() {
   document.getElementById('ftr-el').style.display = 'none';
@@ -2018,6 +2042,7 @@ function openCalModal() {
   document.getElementById('cal-eyeh-lbl').textContent  = S.eyeH+' mm';
   document.getElementById('cal-ref-input').value       = '';
   chooseCalMethod(0);
+  if (S.imgLoaded) redraw();
 }
 // Returns to the measurement view. Kept the old name (closeCalModal) as an
 // alias too, since it's referenced from a couple of older call sites and
