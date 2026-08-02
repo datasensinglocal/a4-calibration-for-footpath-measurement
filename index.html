@@ -181,12 +181,6 @@ body{
   cursor:pointer;touch-action:manipulation;
 }
 .nbtn:active{opacity:0.7;}
-.cal-badge{
-  font-size:11px;color:var(--muted);
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:20px;padding:4px 10px;cursor:pointer;
-}
-.cal-badge.calibrated{color:var(--success);border-color:rgba(34,197,94,0.3);}
 
 /* ── MATERIALS ── */
 .mat-sec{padding:14px 18px 0;}
@@ -543,7 +537,18 @@ td.hi{color:white;font-weight:700;}
   </div>
 
   <!-- Measurement row -->
-  <div class="ftr">
+  <div id="cal-status-box" style="margin:8px 18px 0;">
+    <div id="cal-status-uncalibrated" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;">
+      <span style="font-size:13px;color:var(--muted);">Not calibrated for this phone</span>
+      <button onclick="openCalModal()" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;touch-action:manipulation;">Add Calibration</button>
+    </div>
+    <div id="cal-status-calibrated" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:12px 14px;">
+      <span style="font-size:13px;color:var(--success);">Calibrated ✓ — Scale: <strong id="cal-status-scale">1.00×</strong></span>
+      <button onclick="openCalModal()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;touch-action:manipulation;">Recalibrate</button>
+    </div>
+  </div>
+
+  <div class="ftr" id="ftr-el">
     <div class="ftr-r1">
       <span class="flbl">Footpath width (mm)</span>
       <div class="vpill"><span class="vval" id="w-val">—</span></div>
@@ -583,7 +588,6 @@ td.hi{color:white;font-weight:700;}
     <div style="margin-top:2px;padding:10px 0 0;border-top:1px solid var(--border);">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <span class="flbl">Focal point</span>
-        <div class="cal-badge" id="cal-badge" onclick="openCalModal()">Scale: 1.00×</div>
       </div>
       <div class="ftr-r2">
         <div style="display:grid;grid-template-columns:repeat(3,36px);grid-template-rows:repeat(3,36px);gap:4px;">
@@ -612,7 +616,7 @@ td.hi{color:white;font-weight:700;}
   </div>
 
   <!-- Materials -->
-  <div class="mat-sec">
+  <div class="mat-sec" id="mat-sec-el">
     <div class="sec-lbl">Footpath Material</div>
     <div class="mat-grid">
       <div class="mat-item" id="mat-paver" onclick="toggleMat('paver')">
@@ -664,10 +668,111 @@ td.hi{color:white;font-weight:700;}
   </div>
 
   <!-- Submit -->
-  <div class="submit-sec">
+  <div class="submit-sec" id="submit-sec-el">
     <button class="btn-submit" id="btn-submit" onclick="submitRecord()">SUBMIT</button>
     <div class="status-msg" id="status-msg"></div>
     <div id="img-download-sec" style="display:none;padding:6px 0 0;"></div>
+  </div>
+
+  <!-- ═══════════ CALIBRATION PANEL — replaces the photo below with itself; the photo above stays put ═══════════ -->
+  <div id="cal-panel" style="display:none;padding:4px 18px 20px;">
+
+    <div id="cal-step-choose">
+      <a href="#" onclick="backToMeasurement();return false;" style="display:inline-block;margin-bottom:14px;color:var(--accent2);font-size:13px;text-decoration:none;font-weight:600;">← Back to Measurement</a>
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px;">Calibrate</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Adjust measurement scale for your phone and camera height.</div>
+
+      <div class="info-card" id="cal-info-card">
+        <strong>Phone:</strong> <span id="cal-phone-lbl">—</span><br>
+        <strong>Current scale:</strong> <span id="cal-scale-lbl">1.000×</span><br>
+        <strong>Camera height:</strong> <span id="cal-eyeh-lbl">1200 mm</span>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">Your Height (cm)</label>
+        <div style="display:flex;gap:8px;">
+          <input class="form-input" id="cal-height-input" type="number" placeholder="e.g. 170" style="flex:1;">
+          <button class="btn-secondary" style="flex:0 0 auto;padding:0 16px;" onclick="estimateEyeHFromHeight()">Estimate</button>
+        </div>
+        <span class="form-hint">Most people shoot at chest/elbow height, not eye level — this fills in a starting camera height below, which you can still fine-tune with either method.</span>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">Camera Height (mm)</label>
+        <input class="form-input" id="cal-eyeh-input" type="number" placeholder="1200" value="1200">
+        <span class="form-hint">Auto-filled from your height above — adjust if your shooting height differs</span>
+      </div>
+
+      <div class="divider" style="margin-bottom:14px;">Calibrate footpath scale</div>
+      <div class="form-hint" style="margin-bottom:10px;display:block;">Choose how to set the scale for this phone:</div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+        <button class="btn-secondary" style="width:100%;text-align:left;padding:14px;" onclick="chooseCalMethod(1)">
+          <strong style="display:block;font-size:13px;color:var(--text);margin-bottom:2px;">1 · I know the exact footpath width</strong>
+          <span style="font-size:11px;color:var(--muted);">Type in a measurement you've taken with a tape</span>
+        </button>
+        <button class="btn-secondary" style="width:100%;text-align:left;padding:14px;" onclick="chooseCalMethod(2)">
+          <strong style="display:block;font-size:13px;color:var(--text);margin-bottom:2px;">2 · Place an A4 sheet on the footpath</strong>
+          <span style="font-size:11px;color:var(--muted);">No measuring — just tap the sheet's edges in the photo</span>
+        </button>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button class="btn-secondary btn-danger" style="flex:1;" onclick="resetCal()">Reset to Default</button>
+        <button class="btn-secondary" style="flex:1;" onclick="openGuideModal()">📋 Field Guide</button>
+      </div>
+    </div>
+
+    <div id="cal-step-method1" style="display:none;">
+      <a href="#" onclick="chooseCalMethod(0);return false;" style="display:inline-block;margin-bottom:10px;color:var(--accent2);font-size:13px;text-decoration:none;font-weight:600;">← Back</a>
+      <div style="font-size:18px;font-weight:800;margin-bottom:14px;">Known Footpath Measurement</div>
+      <div class="cal-steps">
+        <div class="cal-step"><div class="step-num">1</div>Position the Building edge and Kerb edge lines exactly on the width you measured</div>
+        <div class="cal-step"><div class="step-num">2</div>Enter that width below and tap Apply Calibration</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Known Reference Width (mm)</label>
+        <input class="form-input" id="cal-ref-input" type="number" placeholder="e.g. 600">
+        <span class="form-hint">Leave blank to update camera height only</span>
+      </div>
+      <button class="btn-primary" style="width:100%;" onclick="doCalibrate()">Apply Calibration</button>
+    </div>
+
+    <div id="cal-step-method2" style="display:none;">
+      <a href="#" onclick="chooseCalMethod(0);return false;" style="display:inline-block;margin-bottom:10px;color:var(--accent2);font-size:13px;text-decoration:none;font-weight:600;">← Back</a>
+      <div style="font-size:18px;font-weight:800;margin-bottom:4px;">Calibrate with A4 Paper</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">Quick setup — no tape measure needed.</div>
+
+      <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);margin-bottom:16px;">
+        <svg viewBox="0 0 300 200" width="100%" style="max-width:260px;display:block;margin:0 auto;">
+          <polygon points="20,190 280,190 175,68 125,68" fill="#101a2c" stroke="#253449" stroke-width="1"/>
+          <line x1="20" y1="190" x2="125" y2="68" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
+          <line x1="280" y1="190" x2="175" y2="68" stroke="#2dd4bf" stroke-width="3" stroke-linecap="round"/>
+          <rect x="93" y="116" width="114" height="26" rx="2" fill="#f8fafc" stroke="#e879f9" stroke-width="2.5"/>
+          <text x="150" y="134" font-size="12" font-weight="800" fill="#0c1220" text-anchor="middle">A4</text>
+          <rect x="131" y="150" width="38" height="62" rx="7" fill="#162032" stroke="#f0f4f8" stroke-width="2"/>
+          <rect x="139" y="157" width="22" height="43" rx="2" fill="#060d1a"/>
+          <circle cx="150" cy="204" r="2.5" fill="#6b84a0"/>
+          <line x1="150" y1="150" x2="150" y2="118" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3"/>
+        </svg>
+      </div>
+
+      <div class="cal-steps">
+        <div class="cal-step"><div class="step-num">1</div>Turn your phone to <strong style="color:var(--text);">portrait</strong> orientation — the app's perspective math assumes a portrait photo.</div>
+        <div class="cal-step"><div class="step-num">2</div>Lay a sheet of A4 paper flat on the ground, <strong style="color:var(--text);">across the footpath</strong> (perpendicular to the direction you're walking), roughly in the lower-middle of the frame.</div>
+        <div class="cal-step"><div class="step-num">3</div>Take the photo with both edges of the sheet clearly visible, then tap "Start Marking" and tap the sheet's two edges directly on the photo above.</div>
+      </div>
+
+      <button class="btn-primary" style="width:100%;" onclick="startA4Mode()">Start Marking →</button>
+    </div>
+
+    <div id="cal-step-result" style="display:none;text-align:center;padding:24px 0 8px;">
+      <div style="font-size:40px;margin-bottom:10px;">✅</div>
+      <div style="font-size:18px;font-weight:800;color:var(--success);margin-bottom:6px;">Calibrated ✓</div>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:22px;">Scale factor: <strong id="cal-result-scale" style="color:var(--text);">1.000×</strong></div>
+      <button class="btn-primary" style="width:100%;" onclick="backToMeasurement()">Test Measurement →</button>
+    </div>
+
   </div>
 
   <!-- Records table -->
@@ -684,109 +789,6 @@ td.hi{color:white;font-weight:700;}
     </table>
   </div>
 </div>
-
-<!-- ═══════════════════ CALIBRATION MODAL ═══════════════════ -->
-<div class="modal-overlay" id="cal-modal" style="display:none;" onclick="closeCalModal(event)">
-  <div class="modal-sheet" onclick="event.stopPropagation()">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Calibrate</div>
-    <div class="modal-sub">Adjust measurement scale for your phone and camera height.</div>
-
-    <div class="info-card" id="cal-info-card">
-      <strong>Phone:</strong> <span id="cal-phone-lbl">—</span><br>
-      <strong>Current scale:</strong> <span id="cal-scale-lbl">1.000×</span><br>
-      <strong>Camera height:</strong> <span id="cal-eyeh-lbl">1200 mm</span>
-    </div>
-
-    <div class="form-group" style="margin-bottom:14px;">
-      <label class="form-label">Your Height (cm)</label>
-      <div style="display:flex;gap:8px;">
-        <input class="form-input" id="cal-height-input" type="number" placeholder="e.g. 170" style="flex:1;">
-        <button class="btn-secondary" style="flex:0 0 auto;padding:0 16px;" onclick="estimateEyeHFromHeight()">Estimate</button>
-      </div>
-      <span class="form-hint">Most people shoot at chest/elbow height, not eye level — this fills in a starting camera height below, which you can still fine-tune with either method.</span>
-    </div>
-
-    <div class="form-group" style="margin-bottom:14px;">
-      <label class="form-label">Camera Height (mm)</label>
-      <input class="form-input" id="cal-eyeh-input" type="number" placeholder="1200" value="1200">
-      <span class="form-hint">Auto-filled from your height above — adjust if your shooting height differs</span>
-    </div>
-
-    <div class="divider" style="margin-bottom:14px;">Calibrate footpath scale</div>
-    <div class="form-hint" style="margin-bottom:10px;display:block;">Choose how to set the scale for this phone:</div>
-
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;">
-      <button class="btn-secondary" style="width:100%;text-align:left;padding:14px;" onclick="chooseCalMethod(1)">
-        <strong style="display:block;font-size:13px;color:var(--text);margin-bottom:2px;">1 · I know the exact footpath width</strong>
-        <span style="font-size:11px;color:var(--muted);">Type in a measurement you've taken with a tape</span>
-      </button>
-      <button class="btn-secondary" style="width:100%;text-align:left;padding:14px;" onclick="chooseCalMethod(2)">
-        <strong style="display:block;font-size:13px;color:var(--text);margin-bottom:2px;">2 · Place an A4 sheet on the footpath</strong>
-        <span style="font-size:11px;color:var(--muted);">No measuring — just tap the sheet's edges in the photo</span>
-      </button>
-    </div>
-
-    <div id="cal-method1-panel" style="display:none;">
-      <div class="cal-steps" style="margin-top:10px;">
-        <div class="cal-step"><div class="step-num">1</div>Position the Building edge and Kerb edge lines exactly on the width you measured</div>
-        <div class="cal-step"><div class="step-num">2</div>Enter that width below and tap Apply Calibration</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Known Reference Width (mm)</label>
-        <input class="form-input" id="cal-ref-input" type="number" placeholder="e.g. 600">
-        <span class="form-hint">Leave blank to update camera height only</span>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-secondary" onclick="chooseCalMethod(0)">Back</button>
-        <button class="btn-primary" style="flex:1;" onclick="doCalibrate()">Apply Calibration</button>
-      </div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeCalModal()">Close</button>
-      <button class="btn-secondary btn-danger" style="flex:1;" onclick="resetCal()">Reset to Default</button>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeCalModal();openGuideModal();" style="width:100%;">📋 Field Guide</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════ A4 CALIBRATION INSTRUCTIONS MODAL ═══════════ -->
-<div class="modal-overlay" id="a4-instructions-modal" style="display:none;" onclick="closeModal('a4-instructions-modal',event)">
-  <div class="modal-sheet" onclick="event.stopPropagation()">
-    <div class="modal-handle"></div>
-    <div class="modal-title">Calibrate with A4 Paper</div>
-    <div class="modal-sub">Quick setup — no tape measure needed.</div>
-
-    <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);margin-bottom:16px;">
-      <svg viewBox="0 0 300 200" width="100%" style="max-width:260px;display:block;margin:0 auto;">
-        <polygon points="20,190 280,190 175,68 125,68" fill="#101a2c" stroke="#253449" stroke-width="1"/>
-        <line x1="20" y1="190" x2="125" y2="68" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
-        <line x1="280" y1="190" x2="175" y2="68" stroke="#2dd4bf" stroke-width="3" stroke-linecap="round"/>
-        <rect x="93" y="116" width="114" height="26" rx="2" fill="#f8fafc" stroke="#e879f9" stroke-width="2.5"/>
-        <text x="150" y="134" font-size="12" font-weight="800" fill="#0c1220" text-anchor="middle">A4</text>
-        <rect x="131" y="150" width="38" height="62" rx="7" fill="#162032" stroke="#f0f4f8" stroke-width="2"/>
-        <rect x="139" y="157" width="22" height="43" rx="2" fill="#060d1a"/>
-        <circle cx="150" cy="204" r="2.5" fill="#6b84a0"/>
-        <line x1="150" y1="150" x2="150" y2="118" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4,3"/>
-      </svg>
-    </div>
-
-    <div class="cal-steps">
-      <div class="cal-step"><div class="step-num">1</div>Turn your phone to <strong style="color:var(--text);">portrait</strong> orientation — the app's perspective math assumes a portrait photo.</div>
-      <div class="cal-step"><div class="step-num">2</div>Lay a sheet of A4 paper flat on the ground, <strong style="color:var(--text);">across the footpath</strong> (perpendicular to the direction you're walking), roughly in the lower-middle of the frame.</div>
-      <div class="cal-step"><div class="step-num">3</div>Take the photo with both edges of the sheet clearly visible, then tap "Start Marking" and tap the sheet's two edges directly on the photo.</div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn-secondary" onclick="closeModal('a4-instructions-modal');openCalModal();">Back</button>
-      <button class="btn-primary" style="flex:1;" onclick="closeModal('a4-instructions-modal');startA4Mode();">Start Marking →</button>
-    </div>
-  </div>
-</div>
-
 <!-- ═══════════ PROCESS MEASUREMENTS MODAL ═══════════ -->
 <div class="modal-overlay" id="process-modal" style="display:none;" onclick="closeModal('process-modal',event)">
   <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh;overflow-y:auto;">
@@ -1467,20 +1469,25 @@ function redraw() {
 
   // isc = inverse scale: counter-scale UI elements so they stay constant screen size
   var isc = 1 / Z.scale;
+  var sc = isc.toFixed(4); // used by both the guarded building/kerb overlay and the always-rendered A4 points below
+  var sw_width = (2.0*isc).toFixed(2);
+  var dash_w   = (4*isc)+' '+(3*isc);
 
-  // Frame outline — counter-scaled stroke
+  // Frame outline — counter-scaled stroke (hidden during A4 marking, see below)
   var frameEl = document.getElementById('g-frame');
-  frameEl.setAttribute('d', framePath(p0,p1));
+  frameEl.setAttribute('d', S.aMode ? '' : framePath(p0,p1));
   frameEl.setAttribute('stroke-width', (5*isc).toFixed(2));
 
   // depth grid — counter-scaled stroke
   var grid='';
-  for(var z=1000;z<=12000;z+=1000){
-    var py=S.vp.y+(S.focal*S.eyeH/z);
-    if(py>S.vp.y&&py<=S.H)
-      grid+='<line x1="'+lineX(wBxDraw,py)+'" y1="'+py
-           +'" x2="'+lineX(kBxDraw,py)+'" y2="'+py
-           +'" stroke="white" stroke-width="'+(1*isc).toFixed(2)+'" opacity="0.2"/>';
+  if (!S.aMode) {
+    for(var z=1000;z<=12000;z+=1000){
+      var py=S.vp.y+(S.focal*S.eyeH/z);
+      if(py>S.vp.y&&py<=S.H)
+        grid+='<line x1="'+lineX(wBxDraw,py)+'" y1="'+py
+             +'" x2="'+lineX(kBxDraw,py)+'" y2="'+py
+             +'" stroke="white" stroke-width="'+(1*isc).toFixed(2)+'" opacity="0.2"/>';
+    }
   }
   document.getElementById('g-grid').innerHTML=grid;
 
@@ -1488,6 +1495,7 @@ function redraw() {
   var wLX=bLeft?32:-(wLW+32);
   var kLX=bLeft?-(kLW+32):32;
   var u='';
+  if (!S.aMode) {
 
   // XSZ stays constant on screen — scale by isc in content space
   var XSZ = 12*isc;
@@ -1496,10 +1504,8 @@ function redraw() {
   var sw_thick = (3.0*isc).toFixed(2);
   var sw_knob  = (3.0*isc).toFixed(2);
   var sw_cross = (3.5*isc).toFixed(2);
-  var sw_width = (2.0*isc).toFixed(2);
   var sw_dim   = (2.0*isc).toFixed(2);
   var dash_guide = (8*isc)+','+(5*isc);
-  var dash_w     = (4*isc)+' '+(3*isc);
 
   // Perspective guide lines — draw to frozen exit point when locked
   u+='<line x1="'+S.vp.x+'" y1="'+S.vp.y+'" x2="'+p0.x+'" y2="'+p0.y
@@ -1516,8 +1522,7 @@ function redraw() {
     +'" stroke="white" stroke-width="'+sw_width+'" stroke-dasharray="'+dash_w+'" opacity="0.5"/>';
 
   // Helper: counter-scaled group at a point
-  // transform="translate(x,y) scale(isc)" keeps visual size constant
-  var sc = isc.toFixed(4);
+  // transform="translate(x,y) scale(isc)" keeps visual size constant — sc itself is computed above, before the guard
 
   // Vanishing point handle
   if(S.vp.locked) {
@@ -1629,6 +1634,7 @@ function redraw() {
     var obadge2 = document.getElementById('offset-badge');
     if (obadge2) obadge2.style.display = 'none';
   }
+  } // end !S.aMode guard
 
   // ── A4 calibration points (Method 2) — plain tapped markers, no perspective lines ──
   if (S.aMode && S.aPts.length) {
@@ -1987,7 +1993,26 @@ function resetForNext() {
 }
 
 // ─── CALIBRATION ───────────────────────────────────────────────────────────────
+// Shows/hides the measurement-view sections vs. the calibration panel — the
+// photo (.vwrap) above is never touched by either, so it stays visible and
+// fixed throughout; only the section below it swaps.
+function showMeasurementSections() {
+  document.getElementById('ftr-el').style.display = 'flex';
+  document.getElementById('mat-sec-el').style.display = 'block';
+  document.getElementById('submit-sec-el').style.display = 'block';
+  document.getElementById('cal-status-box').style.display = 'block';
+  document.getElementById('cal-panel').style.display = 'none';
+}
+function hideMeasurementSections() {
+  document.getElementById('ftr-el').style.display = 'none';
+  document.getElementById('mat-sec-el').style.display = 'none';
+  document.getElementById('submit-sec-el').style.display = 'none';
+  document.getElementById('cal-status-box').style.display = 'none';
+}
+
 function openCalModal() {
+  hideMeasurementSections();
+  document.getElementById('cal-panel').style.display = 'block';
   var cal=JSON.parse(localStorage.getItem('fp_cal_'+U.model)||'{}');
   document.getElementById('cal-phone-lbl').textContent = U.model;
   document.getElementById('cal-scale-lbl').textContent = (cal.scaleFactor||1).toFixed(3)+'×';
@@ -1995,13 +2020,16 @@ function openCalModal() {
   document.getElementById('cal-eyeh-input').value      = cal.eyeH||U.eyeH||1200;
   document.getElementById('cal-height-input').value    = U.heightCM || '';
   document.getElementById('cal-ref-input').value       = '';
-  document.getElementById('cal-method1-panel').style.display = 'none';
-  document.getElementById('cal-modal').style.display   = 'flex';
+  chooseCalMethod(0);
 }
-function closeCalModal(e) {
-  if(!e||e.target===document.getElementById('cal-modal'))
-    document.getElementById('cal-modal').style.display='none';
+// Returns to the measurement view. Kept the old name (closeCalModal) as an
+// alias too, since it's referenced from a couple of older call sites and
+// behaves identically now that calibration is an in-page panel rather than
+// a modal overlay.
+function backToMeasurement() {
+  showMeasurementSections();
 }
+function closeCalModal() { backToMeasurement(); }
 // Logs the current eyeH/scaleFactor for this surveyor to a 'Calibration' tab
 // in the same sheet (via a new Apps Script action — see apps_script_additions.gs)
 // so the Measurements-processing pipeline can look up a surveyor's scale by
@@ -2031,11 +2059,17 @@ function doCalibrate() {
   localStorage.setItem('fp_cal_'+U.model,JSON.stringify(cal));
   updateCalBadge();
   if(S.imgLoaded) redraw();
-  closeCalModal();
-  showToast('Calibration saved for '+U.model,'success');
+  showCalResult();
   document.getElementById('cal-nudge').style.display='none';
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor!==1.0);
   syncCalibrationToSheet();
+}
+function showCalResult() {
+  document.getElementById('cal-step-choose').style.display  = 'none';
+  document.getElementById('cal-step-method1').style.display = 'none';
+  document.getElementById('cal-step-method2').style.display = 'none';
+  document.getElementById('cal-step-result').style.display  = 'block';
+  document.getElementById('cal-result-scale').textContent = S.scaleFactor.toFixed(3)+'×';
 }
 function resetCal() {
   if(!confirm('Reset calibration for '+U.model+'?')) return;
@@ -2044,14 +2078,18 @@ function resetCal() {
   localStorage.removeItem('fp_cal_'+U.model);
   updateCalBadge();
   if(S.imgLoaded) redraw();
-  closeCalModal();
+  backToMeasurement();
   showToast('Calibration reset','info');
   document.getElementById('btn-cal-hdr').classList.remove('active');
 }
 function updateCalBadge() {
-  var el=document.getElementById('cal-badge');
-  el.textContent='Scale: '+S.scaleFactor.toFixed(2)+'×';
-  el.classList.toggle('calibrated', S.scaleFactor!==1.0);
+  var calibrated = S.scaleFactor !== 1.0;
+  var un = document.getElementById('cal-status-uncalibrated');
+  var cal = document.getElementById('cal-status-calibrated');
+  if (un)  un.style.display  = calibrated ? 'none' : 'flex';
+  if (cal) cal.style.display = calibrated ? 'flex' : 'none';
+  var scaleEl = document.getElementById('cal-status-scale');
+  if (scaleEl) scaleEl.textContent = S.scaleFactor.toFixed(2)+'×';
 }
 
 // ─── CAMERA HEIGHT FROM PERSON'S HEIGHT ───────────────────────────────────────
@@ -2106,21 +2144,15 @@ function applyEyeHFromInput() {
   S.eyeH = v;
   return v;
 }
-// Toggles which calibration method's fields are shown. 0 = collapse back to
-// the chooser, 1 = reveal the known-width fields inline, 2 = hand off to the
-// A4 instructions modal (which itself leads into startA4Mode()).
+// Switches which calibration-panel step is shown. 0 = back to the chooser,
+// 1 = known-width fields, 2 = the A4 instructions + Start Marking step
+// (folded in here now — previously a separate modal).
 function chooseCalMethod(n) {
-  var panel1 = document.getElementById('cal-method1-panel');
-  if (n === 1) {
-    panel1.style.display = 'block';
-  } else if (n === 2) {
-    panel1.style.display = 'none';
-    applyEyeHFromInput();
-    closeCalModal();
-    document.getElementById('a4-instructions-modal').style.display = 'flex';
-  } else {
-    panel1.style.display = 'none';
-  }
+  document.getElementById('cal-step-choose').style.display  = n===0 ? 'block' : 'none';
+  document.getElementById('cal-step-method1').style.display = n===1 ? 'block' : 'none';
+  document.getElementById('cal-step-method2').style.display = n===2 ? 'block' : 'none';
+  document.getElementById('cal-step-result').style.display  = 'none';
+  if (n === 2) applyEyeHFromInput();
 }
 
 
@@ -2134,7 +2166,7 @@ function chooseCalMethod(n) {
 function startA4Mode() {
   if (!S.imgLoaded) { showToast('Load a photo first','error'); return; }
   applyEyeHFromInput();
-  closeCalModal();
+  document.getElementById('cal-panel').style.display = 'none';
   S.aMode = true;
   S.aPts = [];
   document.getElementById('a4-panel').style.display = 'block';
@@ -2145,6 +2177,8 @@ function cancelA4Mode() {
   S.aMode = false;
   S.aPts = [];
   document.getElementById('a4-panel').style.display = 'none';
+  document.getElementById('cal-panel').style.display = 'block';
+  chooseCalMethod(2);
   redraw();
 }
 function placeA4Point(p) {
@@ -2186,8 +2220,11 @@ function confirmA4(knownMM) {
   localStorage.setItem('fp_cal_' + U.model, JSON.stringify(cal));
   updateCalBadge();
   redraw();
-  cancelA4Mode();
-  showToast('Calibrated from A4 sheet ✓','success');
+  S.aMode = false;
+  S.aPts = [];
+  document.getElementById('a4-panel').style.display = 'none';
+  document.getElementById('cal-panel').style.display = 'block';
+  showCalResult();
   document.getElementById('cal-nudge').style.display = 'none';
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
   syncCalibrationToSheet();
