@@ -546,14 +546,6 @@ td.hi{color:white;font-weight:700;}
   </div>
   <p class="hint" id="hint" style="display:none;">👆 tap a knob to lock it · drag to move</p>
 
-  <!-- First-use calibration nudge -->
-  <div id="cal-nudge" style="display:none;margin:8px 18px 0;">
-    <div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-      <span style="font-size:12px;color:#93b4d8;line-height:1.5;">📐 First time on <strong id="nudge-model" style="color:var(--text);">this phone</strong> — add a measurement to calibrate the grid scale.</span>
-      <button onclick="openCalModal()" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;flex-shrink:0;">Calibrate</button>
-    </div>
-  </div>
-
   <!-- Measurement row -->
   <div id="cal-status-box" style="margin:8px 18px 0;">
     <div id="cal-status-uncalibrated" style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;">
@@ -1087,12 +1079,6 @@ function startMain() {
   S.scaleFactor = cal.scaleFactor || 1.0;
   updateCalBadge();
 
-  // Show first-use calibration nudge
-  var isFirstUse = !localStorage.getItem("fp_cal_" + U.model);
-  var nudge = document.getElementById("cal-nudge");
-  nudge.style.display = isFirstUse ? "block" : "none";
-  if (isFirstUse) document.getElementById("nudge-model").textContent = U.model;
-
   // Show setup banner if no Apps Script configured
   document.getElementById('setup-banner').style.display =
     (!APPS_SCRIPT_URL) ? 'block' : 'none';
@@ -1556,12 +1542,17 @@ function redraw() {
   var sc = isc.toFixed(4); // used by both the guarded building/kerb overlay and the always-rendered A4 points below
   var sw_width = (2.0*isc).toFixed(2);
   var dash_w   = (4*isc)+' '+(3*isc);
-  // The Building-edge/Kerb-edge/VP overlay is only meaningful during normal
-  // measurement — hide it for the whole calibration flow (not just active A4
-  // tapping), since a leftover overlay from before is confusing clutter on
-  // top of whatever the calibration step is actually asking the person to do.
+  // The Building-edge/Kerb-edge/VP overlay is meaningful during normal
+  // measurement AND during Method 1 calibration (you drag those exact lines
+  // onto the reference feature before entering its width) — hide it only
+  // for the calibration steps that don't need it (choosing a method, the A4
+  // instructions/tapping, and the result screen), where a leftover overlay
+  // from before is just confusing clutter.
   var calPanelEl = document.getElementById('cal-panel');
-  var inCalFlow = S.aMode || (calPanelEl && calPanelEl.style.display !== 'none');
+  var calPanelOpen = calPanelEl && calPanelEl.style.display !== 'none';
+  var method1El = document.getElementById('cal-step-method1');
+  var onMethod1 = method1El && method1El.style.display !== 'none';
+  var inCalFlow = (S.aMode || calPanelOpen) && !onMethod1;
 
   // Frame outline — counter-scaled stroke (hidden during calibration, see above)
   var frameEl = document.getElementById('g-frame');
@@ -2156,7 +2147,6 @@ function doCalibrate() {
   updateCalBadge();
   if(S.imgLoaded) redraw();
   showCalResult();
-  document.getElementById('cal-nudge').style.display='none';
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor!==1.0);
   syncCalibrationToSheet();
 }
@@ -2237,6 +2227,7 @@ function chooseCalMethod(n) {
   if (n === 1) document.getElementById('cal-step-method1').style.display = 'block';
   else if (n === 2) { document.getElementById('cal-step-method2').style.display = 'block'; applyEyeHFromInput(); }
   else document.getElementById('cal-step-choose').style.display = 'block';
+  if (S.imgLoaded) redraw();
 }
 
 
@@ -2315,7 +2306,6 @@ function finishA4Tapping() {
   S.aPts = [];
   redraw();
   showCalResult();
-  document.getElementById('cal-nudge').style.display = 'none';
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
   syncCalibrationToSheet();
 }
