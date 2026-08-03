@@ -531,7 +531,13 @@ td.hi{color:white;font-weight:700;}
       <button onclick="openCalModal()" style="background:var(--accent);color:white;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;touch-action:manipulation;">Add Calibration</button>
     </div>
     <div id="cal-status-calibrated" style="display:none;align-items:center;justify-content:space-between;gap:10px;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:12px;padding:12px 14px;">
-      <span style="font-size:13px;color:var(--success);">Calibrated ✓ — Scale: <strong id="cal-status-scale">1.00×</strong></span>
+      <span style="font-size:13px;color:var(--success);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">Calibrated ✓
+        <select id="cal-method-select" onchange="setCalMethodChoice(this.value)" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px;font-weight:700;font-family:inherit;">
+          <option value="method1">Method 1</option>
+          <option value="method2">Method 2</option>
+        </select>
+        <strong id="cal-status-scale">1.00×</strong>
+      </span>
       <button onclick="openCalModal()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;font-family:inherit;touch-action:manipulation;">Recalibrate</button>
     </div>
   </div>
@@ -1312,13 +1318,14 @@ function startMain() {
 
   // eyeH is always derived fresh from height (never cached per phone-model —
   // see computeEyeHFromHeightCM). Method 1 and Method 2 each store their own
-  // scaleFactor independently; the active one is their average when both
-  // exist, so a person can add either method (or both) without one silently
-  // overwriting the other.
+  // scaleFactor independently; the ACTIVE one is whichever method the user
+  // has selected in the dropdown (persisted per phone model), so testing
+  // exercises one method at a time instead of a silent blend.
   var cal = JSON.parse(localStorage.getItem('fp_cal_' + U.model) || '{}');
   S.eyeH = U.eyeH || 1200;
   S.calMethod1 = cal.method1 || null;
   S.calMethod2 = cal.method2 || null;
+  S.calMethodChoice = localStorage.getItem('fp_calchoice_' + U.model) || (cal.method1 ? 'method1' : 'method2');
   S.scaleFactor = computeActiveScaleFactor();
   updateCalBadge();
 
@@ -2386,15 +2393,22 @@ function closeCalModal() { backToMeasurement(); }
 // in the same sheet (via a new Apps Script action — see apps_script_additions.gs)
 // so the Measurements-processing pipeline can look up a surveyor's scale by
 // email, from any device, without needing their phone's localStorage.
-// The active scaleFactor is the average of whichever methods have been
-// completed for this phone — both if both exist, otherwise just the one.
-// Uncalibrated (neither done) falls back to 1.0.
+// The active scaleFactor is the method the user has SELECTED in the
+// dropdown (no more silent averaging of Method 1 + Method 2 — the batch
+// pipeline keeps them separate for comparison, so the interactive tool
+// should too). If the selected method isn't calibrated yet, falls back to
+// whichever one is; uncalibrated falls back to 1.0.
 function computeActiveScaleFactor() {
-  var vals = [];
-  if (S.calMethod1) vals.push(S.calMethod1);
-  if (S.calMethod2) vals.push(S.calMethod2);
-  if (!vals.length) return 1.0;
-  return vals.reduce(function(a,b){ return a+b; }, 0) / vals.length;
+  if (S.calMethodChoice === 'method2' && S.calMethod2) return S.calMethod2;
+  if (S.calMethodChoice === 'method1' && S.calMethod1) return S.calMethod1;
+  return S.calMethod1 || S.calMethod2 || 1.0;
+}
+function setCalMethodChoice(choice) {
+  S.calMethodChoice = choice;
+  localStorage.setItem('fp_calchoice_' + U.model, choice);
+  S.scaleFactor = computeActiveScaleFactor();
+  updateCalBadge();
+  if (S.imgLoaded) redraw();
 }
 // Shared by both methods: persists whichever of S.calMethod1/S.calMethod2 was
 // just set (the other is left untouched), recomputes the active scaleFactor,
@@ -2451,7 +2465,7 @@ function showCalResult() {
   document.getElementById('cal-result-scale').textContent = S.scaleFactor.toFixed(3)+'×';
   var detail = document.getElementById('cal-result-detail');
   if (S.calMethod1 && S.calMethod2) {
-    detail.textContent = 'Averaged — Method 1: ' + S.calMethod1.toFixed(3) + '×, Method 2: ' + S.calMethod2.toFixed(3) + '×';
+    detail.textContent = 'On file — Method 1: ' + S.calMethod1.toFixed(3) + '×, Method 2: ' + S.calMethod2.toFixed(3) + '× (choose which to apply from the dropdown on the main screen)';
     detail.style.display = 'block';
   } else if (S.calMethod1) {
     detail.textContent = 'From Method 1 only — add Method 2 too for a more robust average';
@@ -2481,6 +2495,17 @@ function updateCalBadge() {
   var cal = document.getElementById('cal-status-calibrated');
   if (un)  un.style.display  = calibrated ? 'none' : 'flex';
   if (cal) cal.style.display = calibrated ? 'flex' : 'none';
+  var sel = document.getElementById('cal-method-select');
+  if (sel) {
+    sel.options[0].disabled = !S.calMethod1;
+    sel.options[1].disabled = !S.calMethod2;
+    sel.options[0].textContent = 'Method 1' + (S.calMethod1 ? '' : ' (not set)');
+    sel.options[1].textContent = 'Method 2' + (S.calMethod2 ? '' : ' (not set)');
+    // If the stored choice points at a method that isn't calibrated, snap to the one that is
+    if (S.calMethodChoice === 'method1' && !S.calMethod1 && S.calMethod2) S.calMethodChoice = 'method2';
+    if (S.calMethodChoice === 'method2' && !S.calMethod2 && S.calMethod1) S.calMethodChoice = 'method1';
+    sel.value = S.calMethodChoice || (S.calMethod1 ? 'method1' : 'method2');
+  }
   var scaleEl = document.getElementById('cal-status-scale');
   if (scaleEl) scaleEl.textContent = S.scaleFactor.toFixed(2)+'×';
 }
