@@ -795,7 +795,11 @@ td.hi{color:white;font-weight:700;}
         <span class="a4-dot" data-i="2" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></span>
         <span class="a4-dot" data-i="3" style="width:8px;height:8px;border-radius:50%;background:var(--border);"></span>
       </div>
-      <button class="btn-secondary" style="width:100%;" onclick="cancelA4Mode()">Cancel</button>
+      <div id="a4-confirm-row" style="display:none;gap:10px;">
+        <button class="btn-secondary" style="flex:1;" onclick="redoA4Taps()">↺ Redo taps</button>
+        <button class="btn-primary" style="flex:1;" onclick="finishA4Tapping()">Confirm corners ✓</button>
+      </div>
+      <button id="a4-cancel-btn" class="btn-secondary" style="width:100%;" onclick="cancelA4Mode()">Cancel</button>
     </div>
 
     <div id="cal-step-result" style="display:none;text-align:center;padding:24px 0 8px;">
@@ -2593,14 +2597,10 @@ function cancelA4Mode() {
   redraw();
 }
 function placeA4Point(p) {
-  if (S.aPts.length < 4) {
-    S.aPts.push({ x:p.x, y:p.y });
-  } else {
-    S.aPts = [{ x:p.x, y:p.y }]; // 5th tap restarts
-  }
+  if (S.aPts.length >= 4) return; // waiting on Confirm/Redo — ignore stray taps
+  S.aPts.push({ x:p.x, y:p.y });
   updateA4Panel();
   redraw();
-  if (S.aPts.length === 4) finishA4Tapping();
 }
 function updateA4Panel() {
   var txt = document.getElementById('a4-panel-text');
@@ -2609,15 +2609,24 @@ function updateA4Panel() {
   if (n < 4) {
     txt.textContent = 'Tap the ' + A4_CORNER_LABELS[n] + ' corner of the A4 strip in the photo above.';
   } else {
-    txt.textContent = 'Calculating…';
+    txt.textContent = 'Check the outlined box above — does it sit on the A4 strip\u2019s corners? Adjust nothing here; either confirm, or redo the taps.';
   }
   document.querySelectorAll('#a4-panel-progress .a4-dot').forEach(function(dot, i) {
     dot.style.background = i < n ? '#e879f9' : 'var(--border)';
   });
+  var confirmRow = document.getElementById('a4-confirm-row');
+  var cancelBtn  = document.getElementById('a4-cancel-btn');
+  if (confirmRow) confirmRow.style.display = n === 4 ? 'flex' : 'none';
+  if (cancelBtn)  cancelBtn.style.display  = n === 4 ? 'none' : 'block';
 }
-// Runs automatically once all 4 corners are tapped — no follow-up question
-// needed, since which edges are which (297mm across, 210mm along the path)
-// is already fixed by the tap order and the placement instructions.
+function redoA4Taps() {
+  S.aPts = [];
+  updateA4Panel();
+  redraw();
+}
+// Runs when the user CONFIRMS the 4 tapped corners (previously ran
+// automatically on the 4th tap, which whisked the box away before it could
+// even be looked at — no chance to catch a mis-tap).
 function finishA4Tapping() {
   var result = solveA4Calibration(S.aPts);
   if (!result) {
@@ -2693,20 +2702,36 @@ function driveFileIdFromUrl(url) {
 // Images_for_a4_calibration folder server-side), since the Measurements
 // sheet's annotated_image column holds plain filenames.
 function fetchDriveImageBlob(ref) {
-  var payload;
+  var base;
   if (/drive\.google|docs\.google|googleusercontent/.test(ref)) {
     var id = driveFileIdFromUrl(ref);
     if (!id) return Promise.reject(new Error('could not read a Drive file ID from: ' + ref));
-    payload = { action: 'getDriveImage', fileId: id };
+    base = { action: 'getDriveImage', fileId: id };
   } else {
-    payload = { action: 'getDriveImage', fileName: String(ref).trim() };
+    base = { action: 'getDriveImage', fileName: String(ref).trim() };
   }
-  return postToScript(payload).then(function(d) {
-    var byteChars = atob(d.base64);
-    var byteArray = new Uint8Array(byteChars.length);
-    for (var i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-    return new Blob([byteArray], { type: d.mimeType || 'image/jpeg' });
-  });
+  // Large photos come over in base64 slices (see handleGetDriveImage_) —
+  // request sequentially until the reassembled string reaches `total`.
+  var parts = [], got = 0, mime = 'image/jpeg';
+  function next() {
+    return postToScript(Object.assign({}, base, { offset: got })).then(function(d) {
+      if (!d || typeof d.base64 !== 'string' || !d.base64.length || typeof d.total !== 'number') {
+        throw new Error('Drive read returned no image data' + (d && d.error ? ': ' + d.error : '') + ' — file may be unreadable or the script needs redeploying');
+      }
+      parts.push(d.base64);
+      got += d.base64.length;
+      if (d.mimeType) mime = d.mimeType;
+      if (got < d.total) return next();
+      var b64 = parts.join('');
+      var byteChars;
+      try { byteChars = atob(b64); }
+      catch (e) { throw new Error('image data arrived corrupted (' + got + ' of ' + d.total + ' chars) — try re-running'); }
+      var byteArray = new Uint8Array(byteChars.length);
+      for (var i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+      return new Blob([byteArray], { type: mime });
+    });
+  }
+  return next();
 }
 
 function loadImageFromBlob(blob) {
