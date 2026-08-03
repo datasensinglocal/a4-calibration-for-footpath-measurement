@@ -2950,6 +2950,20 @@ async function processMeasurementRow(row) {
     throw err;
   }
 
+  // Work out up-front which columns this row actually needs and whether the
+  // surveyor has the matching calibration — no point downloading and
+  // analysing the image otherwise, and the error message can say exactly
+  // which method is missing.
+  var needM1 = (row.footpath_width_by_method1 === null || row.footpath_width_by_method1 === undefined);
+  var needM2 = (row.footpath_width_by_method2 === null || row.footpath_width_by_method2 === undefined);
+  var canM1 = needM1 && !!cal.method1, canM2 = needM2 && !!cal.method2;
+  if (!canM1 && !canM2) {
+    var missingBits = [];
+    if (needM1 && !cal.method1) missingBits.push('Method 1');
+    if (needM2 && !cal.method2) missingBits.push('Method 2');
+    throw new Error('needs ' + missingBits.join(' and ') + ' width, but ' + row.surveyor + ' has no ' + missingBits.join('/') + ' calibration saved in the sheet — check Calibrations column ' + (missingBits.indexOf('Method 1') !== -1 ? 'F' : 'G'));
+  }
+
   // Prefers the simpler "original photo" column (pink/green lines + a
   // yellow vp dot, no legend clutter) when present, falling back to
   // annotated_image for older rows. ASSUMPTION: the new column is named
@@ -3030,6 +3044,9 @@ function processLog(msg, cls) {
 async function runMeasurementsProcessing() {
   document.getElementById('process-log').innerHTML = '';
   if (!APPS_SCRIPT_URL) { processLog('Add your Apps Script URL in ⚙ Settings first.', 'err'); return; }
+  // Always re-fetch calibrations: a calibration done mid-session (after an
+  // earlier run cached "no method-1 on file") must be picked up.
+  _calCache = {};
 
   processLog('Fetching pending rows from the Measurements sheet…');
   var rows;
