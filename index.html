@@ -2663,12 +2663,20 @@ function driveFileIdFromUrl(url) {
 
 // Reads the file via Apps Script (DriveApp), which runs as whichever Google
 // account owns/deployed the script — not the browser's signed-in account.
-// This is what lets batch processing read every surveyor's uploaded photos
-// without needing an admin to separately sign in with Google in the browser
-// (the old client-side OAuth read only worked for files the signed-in
-// account itself had created, via the drive.file scope).
-function fetchDriveImageBlob(fileId) {
-  return postToScript({ action: 'getDriveImage', fileId: fileId }).then(function(d) {
+// Accepts either a real Drive URL/ID (looked up directly) or a bare
+// filename like photo_2026-08-02_16-51-06.jpg (searched by name inside the
+// Images_for_a4_calibration folder server-side), since the Measurements
+// sheet's annotated_image column holds plain filenames.
+function fetchDriveImageBlob(ref) {
+  var payload;
+  if (/drive\.google|docs\.google|googleusercontent/.test(ref)) {
+    var id = driveFileIdFromUrl(ref);
+    if (!id) return Promise.reject(new Error('could not read a Drive file ID from: ' + ref));
+    payload = { action: 'getDriveImage', fileId: id };
+  } else {
+    payload = { action: 'getDriveImage', fileName: String(ref).trim() };
+  }
+  return postToScript(payload).then(function(d) {
     var byteChars = atob(d.base64);
     var byteArray = new Uint8Array(byteChars.length);
     for (var i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
@@ -2890,10 +2898,9 @@ async function processMeasurementRow(row) {
   // apps_script_additions.gs, which is what actually needs to match your
   // real header).
   var imageUrl = row.original_image || row.annotated_image;
-  var fileId = driveFileIdFromUrl(imageUrl);
-  if (!fileId) throw new Error('could not read a Drive file ID from original_image/annotated_image');
+  if (!imageUrl) throw new Error('no image reference on this row');
 
-  var blob = await fetchDriveImageBlob(fileId);
+  var blob = await fetchDriveImageBlob(imageUrl);
   var loaded = await loadImageFromBlob(blob);
   var imageData = getImageDataFromImg(loaded.img);
   URL.revokeObjectURL(loaded.url);
