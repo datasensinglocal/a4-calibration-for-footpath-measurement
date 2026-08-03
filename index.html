@@ -1004,7 +1004,7 @@ td.hi{color:white;font-weight:700;}
 <script>
 // ─── CONFIG ────────────────────────────────────────────────────────────────────
 // After deploying your Apps Script, paste the web app URL here:
-var DRIVE_FOLDER_ID  = '1TJ3DiFYcMVRyX58CAh0LN5ZlEhyvXQXX';
+var DRIVE_FOLDER_ID  = '16CK31vmrc9hfFHHAsGAD3Xggekq7FQDX';
 var GOOGLE_CLIENT_ID = localStorage.getItem('fp_google_client_id') || '189348645385-2a3viu6u2fpsgnrrdm89u8uov7n4sroh.apps.googleusercontent.com';
 var gAccessToken     = null; // set after OAuth login
 var SHEET_ID        = '1j3QSZFLKX4ADH0I80fic6P9p2fy8zs1nTd3Ip7iXHeg';
@@ -2407,12 +2407,16 @@ function saveCalibrationAndShowResult() {
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
   syncCalibrationToSheet();
 }
+// Keyed by name (not email) because that's what the Measurements sheet's
+// suryevor column actually stores — batch processing looks up calibration
+// by matching that same name, so this has to save under the same key.
 function syncCalibrationToSheet() {
   if (!APPS_SCRIPT_URL || !U.email) return;
   postToScript({ action:'logCalibration', row: {
-    surveyor: U.email, model: U.model, eyeH: S.eyeH,
+    surveyor: U.name, email: U.email, heightCM: U.heightCM,
+    model: U.model, phone: U.phone,
     method1ScaleFactor: S.calMethod1, method2ScaleFactor: S.calMethod2,
-    scaleFactor: S.scaleFactor, time: new Date().toISOString()
+    time: new Date().toISOString()
   }}).catch(function() { /* non-fatal — local calibration still applies on this device */ });
 }
 
@@ -2646,20 +2650,18 @@ function driveFileIdFromUrl(url) {
   return m.sort(function(a,b){ return b.length - a.length; })[0];
 }
 
+// Reads the file via Apps Script (DriveApp), which runs as whichever Google
+// account owns/deployed the script — not the browser's signed-in account.
+// This is what lets batch processing read every surveyor's uploaded photos
+// without needing an admin to separately sign in with Google in the browser
+// (the old client-side OAuth read only worked for files the signed-in
+// account itself had created, via the drive.file scope).
 function fetchDriveImageBlob(fileId) {
-  if (!gAccessToken) throw new Error('Sign in with Google (⚙ Settings) first');
-  return fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media', {
-    headers: { 'Authorization': 'Bearer ' + gAccessToken }
-  }).then(function(r) {
-    if (r.status === 401) {
-      gAccessToken = null;
-      updateGoogleAuthStatus();
-      var authErr = new Error('Google sign-in expired');
-      authErr.authExpired = true;
-      throw authErr;
-    }
-    if (!r.ok) throw new Error('Drive fetch failed (' + r.status + ')');
-    return r.blob();
+  return postToScript({ action: 'getDriveImage', fileId: fileId }).then(function(d) {
+    var byteChars = atob(d.base64);
+    var byteArray = new Uint8Array(byteChars.length);
+    for (var i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+    return new Blob([byteArray], { type: d.mimeType || 'image/jpeg' });
   });
 }
 
@@ -2929,7 +2931,6 @@ function processLog(msg, cls) {
 async function runMeasurementsProcessing() {
   document.getElementById('process-log').innerHTML = '';
   if (!APPS_SCRIPT_URL) { processLog('Add your Apps Script URL in ⚙ Settings first.', 'err'); return; }
-  if (!gAccessToken) { processLog('Sign in with Google in ⚙ Settings first — needed to read images from Drive.', 'err'); return; }
 
   processLog('Fetching pending rows from the Measurements sheet…');
   var rows;
@@ -3124,7 +3125,7 @@ function showDownloadBanner(rawB64, annB64, name) {
   }
   el.style.display = 'block';
   el.innerHTML = '<div style="background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px 14px;">'
-    + '<div style="font-size:11px;color:#93b4d8;margin-bottom:8px;">Save images to <a href="https://drive.google.com/drive/folders/1TJ3DiFYcMVRyX58CAh0LN5ZlEhyvXQXX" target="_blank" style="color:var(--accent);">Drive folder</a> manually:</div>'
+    + '<div style="font-size:11px;color:#93b4d8;margin-bottom:8px;">Save images to <a href="https://drive.google.com/drive/folders/16CK31vmrc9hfFHHAsGAD3Xggekq7FQDX" target="_blank" style="color:var(--accent);">Drive folder</a> manually:</div>'
     + '<div>' + dlLink(rawB64, name+'_raw.jpg', 'Raw') + dlLink(annB64, name+'_annotated.jpg', 'Annotated') + '</div>'
     + '</div>';
 }
