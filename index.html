@@ -7,7 +7,7 @@
 <style>
 :root {
   --bg:#0c1220; --surface:#162032; --surface2:#1e2d42; --border:#253449;
-  --building:#f59e0b; --kerb:#2dd4bf; --vp:#10b981;
+  --building:#39ff14; --kerb:#ff10f0; --vp:#38bdf8;
   --text:#f0f4f8; --muted:#6b84a0; --faint:#253449;
   --yellow:#fde047; --accent:#3b82f6; --accent2:#6366f1;
   --danger:#ef4444; --success:#22c55e; --warn:#f59e0b;
@@ -588,7 +588,7 @@ td.hi{color:white;font-weight:700;}
             <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M5 12l7-7v14z"/></svg>
           </button>
           <div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;">
-            <div style="width:8px;height:8px;border-radius:50%;background:#10b981;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#38bdf8;"></div>
           </div>
           <button class="nbtn" onclick="nudgeVP(4,0)" style="width:36px;height:36px;">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M19 12l-7-7v14z"/></svg>
@@ -719,8 +719,8 @@ td.hi{color:white;font-weight:700;}
       <div style="background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);margin-bottom:16px;">
         <svg viewBox="0 0 300 200" width="100%" style="max-width:260px;display:block;margin:0 auto;">
           <polygon points="20,190 280,190 175,68 125,68" fill="#101a2c" stroke="#253449" stroke-width="1"/>
-          <line x1="20" y1="190" x2="125" y2="68" stroke="#f59e0b" stroke-width="3" stroke-linecap="round"/>
-          <line x1="280" y1="190" x2="175" y2="68" stroke="#2dd4bf" stroke-width="3" stroke-linecap="round"/>
+          <line x1="20" y1="190" x2="125" y2="68" stroke="#39ff14" stroke-width="3" stroke-linecap="round"/>
+          <line x1="280" y1="190" x2="175" y2="68" stroke="#ff10f0" stroke-width="3" stroke-linecap="round"/>
           <rect x="93" y="116" width="114" height="26" rx="2" fill="#f8fafc" stroke="#e879f9" stroke-width="2.5"/>
           <text x="150" y="134" font-size="12" font-weight="800" fill="#0c1220" text-anchor="middle">A4</text>
           <rect x="131" y="150" width="38" height="62" rx="7" fill="#162032" stroke="#f0f4f8" stroke-width="2"/>
@@ -821,7 +821,7 @@ td.hi{color:white;font-weight:700;}
   <div class="modal-sheet" onclick="event.stopPropagation()" style="max-height:88vh;overflow-y:auto;">
     <div class="modal-handle"></div>
     <div class="modal-title">Process Measurements</div>
-    <div class="modal-sub">Reads the 'Measurements' sheet, detects the neon-green road-edge and pink building-edge lines in each annotated image, and computes <strong style="color:var(--text);">footpath_width_by_model</strong> using that surveyor's saved calibration.</div>
+    <div class="modal-sub">Reads the 'Measurements' sheet, detects the neon-pink road-edge and neon-green building-edge lines in each annotated image, and fills <strong style="color:var(--text);">footpath_width_by_method1</strong> and <strong style="color:var(--text);">footpath_width_by_method2</strong> using that surveyor's saved calibrations.</div>
 
     <div class="info-card">
       Needs: signed in with Google (⚙ Settings — for reading images from Drive), and each surveyor must have calibrated at least once in this app so their scale is on file.
@@ -1262,6 +1262,7 @@ function doLogin() {
   U = { name, phone, email, model, heightCM: height, eyeH: computeEyeHFromHeightCM(height) };
   localStorage.setItem('fp_user', JSON.stringify(U));
   syncSurveyorProfile({ name: name, phone: phone, heightCM: height });
+  syncLoginToCalibrations();
   startMain();
 }
 
@@ -1855,10 +1856,10 @@ function redraw() {
 
   // Perspective guide lines — draw to frozen exit point when locked
   u+='<line x1="'+S.vp.x+'" y1="'+S.vp.y+'" x2="'+p0.x+'" y2="'+p0.y
-    +'" stroke="#f59e0b" stroke-width="'+(S.wLocked?sw_thick:sw_line)+'" '
+    +'" stroke="#39ff14" stroke-width="'+(S.wLocked?sw_thick:sw_line)+'" '
     +(S.wLocked?'':'stroke-dasharray="'+dash_guide+'" ')+'opacity="'+(S.wLocked?1:0.8)+'"/>';
   u+='<line x1="'+S.vp.x+'" y1="'+S.vp.y+'" x2="'+p1.x+'" y2="'+p1.y
-    +'" stroke="#2dd4bf" stroke-width="'+(S.kLocked?sw_thick:sw_line)+'" '
+    +'" stroke="#ff10f0" stroke-width="'+(S.kLocked?sw_thick:sw_line)+'" '
     +(S.kLocked?'':'stroke-dasharray="'+dash_guide+'" ')+'opacity="'+(S.kLocked?1:0.8)+'"/>';
 
   // Width indicator — use frozen y and x positions when locked
@@ -1873,14 +1874,14 @@ function redraw() {
   // Vanishing point handle
   if(S.vp.locked) {
     u+='<g transform="translate('+S.vp.x+','+S.vp.y+') scale('+sc+')">'
-      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#10b981" stroke-width="3.5" stroke-linecap="round"/>'
-      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#10b981" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round"/>'
       +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
       +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
       +'</g>';
   } else {
     u+='<g transform="translate('+S.vp.x+','+S.vp.y+') scale('+sc+')" opacity="0.85">'
-      +'<circle r="22" fill="#10b981" stroke="white" stroke-width="2.5"/>'
+      +'<circle r="22" fill="#38bdf8" stroke="white" stroke-width="2.5"/>'
       +'</g>';
   }
 
@@ -1888,21 +1889,21 @@ function redraw() {
   var wExit = (S.wLocked && S.wLockedExit) ? S.wLockedExit : p0;
   if(S.wLocked) {
     u+='<g transform="translate('+wExit.x.toFixed(1)+','+wExit.y.toFixed(1)+') scale('+sc+')">'
-      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"/>'
-      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#f59e0b" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#39ff14" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#39ff14" stroke-width="3.5" stroke-linecap="round"/>'
       +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
       +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
       +'</g>';
     var wXzDraw = lineX(wBxDraw, wZYDraw);
-    u+='<g transform="translate('+wXzDraw+','+wZYDraw+') scale('+sc+')" opacity="0.4" fill="#f59e0b">'
+    u+='<g transform="translate('+wXzDraw+','+wZYDraw+') scale('+sc+')" opacity="0.4" fill="#39ff14">'
       +'<circle r="24" fill="inherit" stroke="white" stroke-width="2"/>'
       +lockIcon(true)+'</g>';
   } else {
-    u+='<g transform="translate('+wXz+','+S.wZY+') scale('+sc+')" fill="#f59e0b">'
+    u+='<g transform="translate('+wXz+','+S.wZY+') scale('+sc+')" fill="#39ff14">'
       +'<circle r="24" fill="inherit" stroke="white" stroke-width="3"/>'
       +lockIcon(false)
-      +'<rect x="'+wLX+'" y="-16" width="'+wLW+'" height="32" rx="16" fill="#f59e0b"/>'
-      +'<text x="'+(wLX+wLW/2)+'" y="6" font-size="14" font-weight="700" fill="white" text-anchor="middle">Building edge</text>'
+      +'<rect x="'+wLX+'" y="-16" width="'+wLW+'" height="32" rx="16" fill="#39ff14"/>'
+      +'<text x="'+(wLX+wLW/2)+'" y="6" font-size="14" font-weight="700" fill="#0c1220" text-anchor="middle">Building edge</text>'
       +'</g>';
   }
 
@@ -1910,20 +1911,20 @@ function redraw() {
   var kExit = (S.kLocked && S.kLockedExit) ? S.kLockedExit : p1;
   if(S.kLocked) {
     u+='<g transform="translate('+kExit.x.toFixed(1)+','+kExit.y.toFixed(1)+') scale('+sc+')">'
-      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"/>'
-      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#2dd4bf" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="#ff10f0" stroke-width="3.5" stroke-linecap="round"/>'
+      +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="#ff10f0" stroke-width="3.5" stroke-linecap="round"/>'
       +'<line x1="-12" y1="-12" x2="12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
       +'<line x1="12" y1="-12" x2="-12" y2="12" stroke="white" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>'
       +'</g>';
-    u+='<g transform="translate('+kXm+','+S.kMY+') scale('+sc+')" opacity="0.4" fill="#2dd4bf">'
+    u+='<g transform="translate('+kXm+','+S.kMY+') scale('+sc+')" opacity="0.4" fill="#ff10f0">'
       +'<circle r="24" fill="inherit" stroke="white" stroke-width="2"/>'
       +lockIcon(true)+'</g>';
   } else {
-    u+='<g transform="translate('+kXm+','+S.kMY+') scale('+sc+')" fill="#2dd4bf">'
+    u+='<g transform="translate('+kXm+','+S.kMY+') scale('+sc+')" fill="#ff10f0">'
       +'<circle r="24" fill="inherit" stroke="white" stroke-width="3"/>'
       +lockIcon(false)
-      +'<rect x="'+kLX+'" y="-16" width="'+kLW+'" height="32" rx="16" fill="#2dd4bf"/>'
-      +'<text x="'+(kLX+kLW/2)+'" y="6" font-size="14" font-weight="700" fill="white" text-anchor="middle">Kerb edge</text>'
+      +'<rect x="'+kLX+'" y="-16" width="'+kLW+'" height="32" rx="16" fill="#ff10f0"/>'
+      +'<text x="'+(kLX+kLW/2)+'" y="6" font-size="14" font-weight="700" fill="#0c1220" text-anchor="middle">Kerb edge</text>'
       +'</g>';
   }
 
@@ -2075,13 +2076,13 @@ function updateLockBtns() {
   // Building edge button
   if(S.wLocked) {
     wb.style.background='rgba(245,158,11,0.15)';
-    wb.style.borderColor='#f59e0b';
+    wb.style.borderColor='#39ff14';
     document.getElementById('lock-w-label').textContent='Unlock Building Edge';
     document.getElementById('lock-w-icon').innerHTML=
       '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0"/>';
   } else {
     wb.style.background='var(--surface)';
-    wb.style.borderColor='#f59e0b33';
+    wb.style.borderColor='#39ff1433';
     document.getElementById('lock-w-label').textContent='Lock Building Edge';
     document.getElementById('lock-w-icon').innerHTML=
       '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
@@ -2089,13 +2090,13 @@ function updateLockBtns() {
   // Kerb edge button
   if(S.kLocked) {
     kb.style.background='rgba(45,212,191,0.12)';
-    kb.style.borderColor='#2dd4bf';
+    kb.style.borderColor='#ff10f0';
     document.getElementById('lock-k-label').textContent='Unlock Kerb Edge';
     document.getElementById('lock-k-icon').innerHTML=
       '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0"/>';
   } else {
     kb.style.background='var(--surface)';
-    kb.style.borderColor='#2dd4bf33';
+    kb.style.borderColor='#ff10f033';
     document.getElementById('lock-k-label').textContent='Lock Kerb Edge';
     document.getElementById('lock-k-icon').innerHTML=
       '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
@@ -2407,17 +2408,27 @@ function saveCalibrationAndShowResult() {
   document.getElementById('btn-cal-hdr').classList.toggle('active', S.scaleFactor !== 1.0);
   syncCalibrationToSheet();
 }
-// Keyed by name (not email) because that's what the Measurements sheet's
-// suryevor column actually stores — batch processing looks up calibration
-// by matching that same name, so this has to save under the same key.
+// Keyed by EMAIL — the Calibrations tab is one upserted row per
+// surveyor_email (A–G per the agreed spec). The Measurements sheet's
+// suryevor column must therefore also contain emails for batch lookup
+// to match.
 function syncCalibrationToSheet() {
   if (!APPS_SCRIPT_URL || !U.email) return;
   postToScript({ action:'logCalibration', row: {
-    surveyor: U.name, email: U.email, heightCM: U.heightCM,
-    model: U.model, phone: U.phone,
-    method1ScaleFactor: S.calMethod1, method2ScaleFactor: S.calMethod2,
+    surveyor_email: U.email, phone_number: U.phone, height: U.heightCM,
+    phone_model: U.model,
+    method1_calibration: S.calMethod1, method2_calibration: S.calMethod2,
     time: new Date().toISOString()
   }}).catch(function() { /* non-fatal — local calibration still applies on this device */ });
+}
+// Writes A–E of the surveyor's Calibrations row at login itself (spec step 1)
+// — F/G are left untouched server-side, so an existing calibration survives.
+function syncLoginToCalibrations() {
+  if (!APPS_SCRIPT_URL || !U.email) return;
+  postToScript({ action:'logLogin', row: {
+    surveyor_email: U.email, phone_number: U.phone, height: U.heightCM,
+    phone_model: U.model, time: new Date().toISOString()
+  }}).catch(function() { /* non-fatal */ });
 }
 
 function doCalibrate() {
@@ -2612,7 +2623,7 @@ function exportCSV() {
 }
 
 // ─── PROCESS MEASUREMENTS SHEET ────────────────────────────────────────────────
-// Batch pipeline: for each 'Measurements' row missing footpath_width_by_model,
+// Batch pipeline: for each 'Measurements' row missing footpath_width_by_method1/2,
 // downloads the annotated_image, detects the neon-green (road/kerb edge) and
 // pink (building edge) overlay lines by colour, finds their intersection —
 // which IS the one-point-perspective vanishing point for that photo, since
@@ -2848,7 +2859,9 @@ function fetchCalibrationForSurveyor(email) {
   if (_calCache[email] !== undefined) return Promise.resolve(_calCache[email]);
   return postToScript({ action:'getCalibration', surveyor: email })
     .then(function(d) {
-      var cal = (d && d.eyeH && d.scaleFactor) ? { eyeH:d.eyeH, scaleFactor:d.scaleFactor } : null;
+      var cal = (d && d.eyeH && (d.method1 || d.method2))
+        ? { eyeH: d.eyeH, method1: d.method1 || null, method2: d.method2 || null }
+        : null;
       _calCache[email] = cal;
       return cal;
     })
@@ -2910,13 +2923,28 @@ async function processMeasurementRow(row) {
   if (!rawResult.ok) {
     throw new Error('width estimate is unstable across the image (spread ' + Math.round(rawResult.spreadFraction*100) + '%) — likely a noisy line detection, not writing it');
   }
-  var widthMM = Math.round(rawResult.median * cal.scaleFactor);
-  if (widthMM < MIN_PLAUSIBLE_MM || widthMM > MAX_PLAUSIBLE_MM) {
-    throw new Error('computed width (' + widthMM + 'mm) is outside a plausible footpath range (' + MIN_PLAUSIBLE_MM + '–' + MAX_PLAUSIBLE_MM + 'mm) — not writing it');
+
+  // One raw perspective width, scaled independently by each method's factor:
+  // Method 1's result → footpath_width_by_method1 (col G), Method 2's →
+  // footpath_width_by_method2 (col H). Only fills what's missing on the row
+  // and only for methods this surveyor has actually calibrated.
+  var updates = {}, parts = [];
+  if (cal.method1 && (row.footpath_width_by_method1 === null || row.footpath_width_by_method1 === undefined)) {
+    var w1 = Math.round(rawResult.median * cal.method1);
+    if (w1 >= MIN_PLAUSIBLE_MM && w1 <= MAX_PLAUSIBLE_MM) { updates.footpath_width_by_method1 = w1; parts.push('m1: ' + w1 + 'mm'); }
+    else parts.push('m1: ' + w1 + 'mm out of range, skipped');
+  }
+  if (cal.method2 && (row.footpath_width_by_method2 === null || row.footpath_width_by_method2 === undefined)) {
+    var w2 = Math.round(rawResult.median * cal.method2);
+    if (w2 >= MIN_PLAUSIBLE_MM && w2 <= MAX_PLAUSIBLE_MM) { updates.footpath_width_by_method2 = w2; parts.push('m2: ' + w2 + 'mm'); }
+    else parts.push('m2: ' + w2 + 'mm out of range, skipped');
+  }
+  if (updates.footpath_width_by_method1 === undefined && updates.footpath_width_by_method2 === undefined) {
+    throw new Error(parts.length ? parts.join(', ') : 'nothing to fill — this surveyor has no calibration for the missing method column(s)');
   }
 
-  await postToScript({ action:'updateMeasurementWidth', s_code: row.s_code, point_code: row.point_code, rowIndex: row.rowIndex, footpath_width_by_model: widthMM });
-  return { widthMM: widthMM, vpSource: vpSource };
+  await postToScript(Object.assign({ action:'updateMeasurementWidth', s_code: row.s_code, point_code: row.point_code, rowIndex: row.rowIndex }, updates));
+  return { summary: parts.join(', '), vpSource: vpSource };
 }
 
 function processLog(msg, cls) {
@@ -2937,8 +2965,8 @@ async function runMeasurementsProcessing() {
   try { rows = await fetchPendingMeasurements(); }
   catch (e) { processLog('Failed to fetch rows: ' + e.message, 'err'); return; }
 
-  if (!rows.length) { processLog('Nothing to do — every row already has footpath_width_by_model.', 'ok'); return; }
-  processLog('Found ' + rows.length + ' row(s) without footpath_width_by_model.');
+  if (!rows.length) { processLog('Nothing to do — every row already has both footpath_width_by_method1 and footpath_width_by_method2.', 'ok'); return; }
+  processLog('Found ' + rows.length + ' row(s) missing method-1 and/or method-2 widths.');
 
   var ok = 0, failed = 0;
   var needCal = {}; // distinct surveyors flagged as missing calibration this run
@@ -2947,7 +2975,7 @@ async function runMeasurementsProcessing() {
     processLog('Row ' + (i+1) + '/' + rows.length + ' — ' + (row.s_code||'?') + ' / ' + (row.point_code||'?') + '…');
     try {
       var result = await processMeasurementRow(row);
-      processLog('  → ' + result.widthMM + 'mm ✓ (vp: ' + result.vpSource + ')', 'ok');
+      processLog('  → ' + result.summary + ' ✓ (vp: ' + result.vpSource + ')', 'ok');
       ok++;
     } catch (e) {
       if (e.authExpired) {
