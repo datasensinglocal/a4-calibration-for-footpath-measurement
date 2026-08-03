@@ -2716,31 +2716,62 @@ function scanColouredPixels(imageData, matchFn) {
   return pts;
 }
 
-// Fits x = m*y + c (regressing x on y, not y on x) — handles the
-// steep/near-vertical perspective lines this app expects correctly,
-// where a normal y=mx+b fit would blow up.
-function fitLineXonY(pts) {
-  if (pts.length < 8) return null;
-  var n = pts.length, sy=0, sx=0, syy=0, sxy=0;
-  for (var i=0;i<n;i++) { var p=pts[i]; sy+=p.y; sx+=p.x; syy+=p.y*p.y; sxy+=p.x*p.y; }
-  var denom = n*syy - sy*sy;
-  if (Math.abs(denom) < 1e-6) return null;
-  var m = (n*sxy - sy*sx) / denom;
-  var c = (sx - m*sy) / n;
-  return { m:m, c:c };
-}
-
-// One round of outlier rejection (drop points >2 std-dev from the initial
-// fit) then refit — a light RANSAC-lite pass against stray matching pixels.
-function robustFitLineXonY(pts) {
-  var fit = fitLineXonY(pts);
-  if (!fit) return null;
-  var resid = pts.map(function(p){ return p.x - (fit.m*p.y + fit.c); });
-  var mean = resid.reduce(function(a,b){return a+b;},0) / resid.length;
-  var variance = resid.reduce(function(a,b){return a+(b-mean)*(b-mean);},0) / resid.length;
-  var sd = Math.sqrt(variance) || 1;
-  var filtered = pts.filter(function(p,i){ return Math.abs(resid[i]-mean) < 2*sd; });
-  return fitLineXonY(filtered) || fit;
+// RANSAC line fit. The old approach (least-squares + one outlier-trim pass)
+// broke on real photos: bright sunlit foliage passes the neon-green colour
+// test, and thousands of scattered leaf pixels swamp the few hundred pixels
+// of the actual drawn line — a global fit through that cloud is garbage, and
+// so is the vanishing point derived from it. RANSAC instead searches for the
+// dominant *collinear* structure: the drawn line is long, dense and straight,
+// while foliage is diffuse, so the line wins the inlier vote even when badly
+// outnumbered. Fitting is done in general (point+direction) form, so shallow
+// lines — wide footpaths where an edge exits the frame's SIDE rather than
+// the bottom — are fitted just as stably as steep ones (the old x-on-y
+// regression grew ill-conditioned as lines flattened out). The result is
+// still returned as x = m·y + c for the downstream maths, with inliers
+// attached so later stages use only real line pixels, not the foliage.
+function ransacFitLine(pts, imgDiag) {
+  if (pts.length < MIN_LINE_PIXELS) return null;
+  // Cap the point count so RANSAC stays fast even when foliage floods the scan
+  if (pts.length > 20000) {
+    var sampled = [];
+    for (var s = 0; s < 20000; s++) sampled.push(pts[(Math.random()*pts.length)|0]);
+    pts = sampled;
+  }
+  var thresh = Math.max(2.5, imgDiag * 0.004);
+  var best = null, bestCount = 0, N = pts.length;
+  for (var it = 0; it < 250; it++) {
+    var a = pts[(Math.random()*N)|0], b = pts[(Math.random()*N)|0];
+    var dx = b.x-a.x, dy = b.y-a.y;
+    var len = Math.hypot(dx,dy);
+    if (len < imgDiag*0.05) continue; // only consider well-separated pairs
+    var nx = -dy/len, ny = dx/len, d0 = nx*a.x + ny*a.y;
+    var count = 0;
+    for (var i=0;i<N;i++) {
+      if (Math.abs(nx*pts[i].x + ny*pts[i].y - d0) < thresh) count++;
+    }
+    if (count > bestCount) { bestCount = count; best = { nx:nx, ny:ny, d0:d0 }; }
+  }
+  if (!best || bestCount < MIN_LINE_PIXELS) return null;
+  var inliers = pts.filter(function(p){ return Math.abs(best.nx*p.x + best.ny*p.y - best.d0) < thresh; });
+  // Total-least-squares refit of the inliers (PCA principal direction)
+  var mx=0, my=0;
+  inliers.forEach(function(p){ mx+=p.x; my+=p.y; });
+  mx/=inliers.length; my/=inliers.length;
+  var sxx=0, sxy=0, syy=0;
+  inliers.forEach(function(p){ var ux=p.x-mx, uy=p.y-my; sxx+=ux*ux; sxy+=ux*uy; syy+=uy*uy; });
+  var theta = 0.5*Math.atan2(2*sxy, sxx-syy);
+  var dxx = Math.cos(theta), dyy = Math.sin(theta);
+  // Segment length along the line — a compact collinear blob (e.g. part of a
+  // green cabinet edge) isn't a drawn edge line; real overlays span a big
+  // chunk of the frame.
+  var tmin=Infinity, tmax=-Infinity;
+  inliers.forEach(function(p){ var t=(p.x-mx)*dxx+(p.y-my)*dyy; if(t<tmin)tmin=t; if(t>tmax)tmax=t; });
+  if (tmax - tmin < imgDiag*0.12) return null;
+  // A converging edge line always has vertical extent; nearly-horizontal
+  // fits are colour noise, and x = m·y + c can't represent them anyway.
+  if (Math.abs(dyy) < 0.05) return null;
+  var m = dxx/dyy, c = mx - m*my;
+  return { m:m, c:c, inliers:inliers };
 }
 
 // The other model draws its own vanishing-point marker — a solid dot,
@@ -2777,14 +2808,32 @@ function findMarkerByColor(imageData, matchFn, maxY) {
     }
   }
   if (xs.length < MIN_VP_MARKER_PIXELS) return null;
-  var minX=Math.min.apply(null,xs), maxX=Math.max.apply(null,xs);
-  var minY=Math.min.apply(null,ys), maxY2=Math.max.apply(null,ys);
-  var span = Math.hypot(maxX-minX, maxY2-minY);
+  // The photo can contain OTHER pixels of the marker colour scattered around
+  // (yellow tree blossoms were a real case) — a global bounding-box test
+  // just gives up then. Instead: find the densest cluster (the solid drawn
+  // dot beats scattered natural colour), keep only pixels near it, and run
+  // the compactness test on that cluster alone.
   var imgDiag = Math.hypot(w, h);
-  if (span > MAX_VP_MARKER_SPAN_FR * imgDiag) return null; // too spread out to be one dot
+  var cell = Math.max(8, imgDiag * 0.02);
+  var buckets = {}, bestKey = null, bestN = 0;
+  for (var i = 0; i < xs.length; i++) {
+    var key = Math.floor(xs[i]/cell) + '_' + Math.floor(ys[i]/cell);
+    buckets[key] = (buckets[key] || 0) + 1;
+    if (buckets[key] > bestN) { bestN = buckets[key]; bestKey = key; }
+  }
+  var parts = bestKey.split('_');
+  var cx = (parseInt(parts[0],10) + 0.5) * cell, cy = (parseInt(parts[1],10) + 0.5) * cell;
+  var kx = [], ky = [], keepR = 1.5 * cell;
+  for (var j = 0; j < xs.length; j++) {
+    if (Math.hypot(xs[j]-cx, ys[j]-cy) < keepR) { kx.push(xs[j]); ky.push(ys[j]); }
+  }
+  if (kx.length < MIN_VP_MARKER_PIXELS) return null;
+  var minX=Math.min.apply(null,kx), maxX=Math.max.apply(null,kx);
+  var minY=Math.min.apply(null,ky), maxY2=Math.max.apply(null,ky);
+  if (Math.hypot(maxX-minX, maxY2-minY) > MAX_VP_MARKER_SPAN_FR * imgDiag) return null;
   var sx=0, sy=0;
-  for (var i=0;i<xs.length;i++) { sx+=xs[i]; sy+=ys[i]; }
-  return { x: sx/xs.length, y: sy/xs.length };
+  for (var k=0;k<kx.length;k++) { sx+=kx[k]; sy+=ky[k]; }
+  return { x: sx/kx.length, y: sy/kx.length };
 }
 
 // Tries the yellow-dot style first (the "original photo" column), then the
@@ -2818,11 +2867,20 @@ var WIDTH_SAMPLE_BAND_FRACTION = 0.35;
 var WIDTH_SAMPLE_STEP_PX = 3;
 var MAX_WIDTH_SPREAD_FRACTION = 0.25; // spread/median above this = don't trust it
 
-function computeWidthFromDetectedLines(greenPts, pinkPts, greenLine, pinkLine, vp, eyeH) {
+function computeWidthFromDetectedLines(greenPts, pinkPts, greenLine, pinkLine, vp, eyeH, imgH) {
   var minY = Math.max(Math.min.apply(null, greenPts.map(function(p){return p.y;})),
                        Math.min.apply(null, pinkPts.map(function(p){return p.y;})));
   var maxY = Math.min(Math.max.apply(null, greenPts.map(function(p){return p.y;})),
                        Math.max.apply(null, pinkPts.map(function(p){return p.y;})));
+  // On wide footpaths an edge line can exit through a SIDE of the frame, so
+  // the two lines' detected pixel ranges may barely overlap in y. The fitted
+  // lines are still valid below where their pixels stop — the maths doesn't
+  // need pixels at a row, just the line equations — so fall back to a band
+  // anchored on the vanishing point and the frame bottom.
+  if (!isFinite(minY) || !isFinite(maxY) || (maxY - minY) < 20) {
+    minY = vp.y + 0.45 * (imgH - vp.y);
+    maxY = imgH - 1;
+  }
   var lowY = maxY - WIDTH_SAMPLE_BAND_FRACTION * (maxY - minY);
   function toWorldMMLocal(sx, sy) { return sy <= vp.y ? 0 : (sx - vp.x) * (eyeH / (sy - vp.y)); }
 
@@ -2848,15 +2906,17 @@ function computeWidthFromDetectedLines(greenPts, pinkPts, greenLine, pinkLine, v
 // a pink sign) shouldn't silently produce a confident-looking number. ──
 var MIN_LINE_PIXELS   = 25;   // below this, too little evidence to trust a fit
 var MIN_PLAUSIBLE_MM  = 300;  // narrower than this isn't a walkable footpath
-var MAX_PLAUSIBLE_MM  = 6000; // wider than this is almost certainly a bad detection
+var MAX_PLAUSIBLE_MM  = 10000; // verified against a real ~7m parking-apron stretch — wide Bengaluru sections are genuine, so the ceiling only guards against the absurd
 
-// A real vanishing point for a photo of a path should sit above where the
-// two edge lines were actually detected (it's the horizon), and not be wildly
-// outside the frame horizontally — both are strong tells of a bad line fit
-// rather than a genuine (if extreme) camera angle.
+// A real vanishing point for a photo of a path should sit at or above where
+// the two edge lines were detected, and not be wildly outside the frame
+// horizontally. NOTE the tolerance: the annotation model draws the lines
+// STARTING at the vp dot, so the topmost line pixels sit at the same height
+// as the vp itself — a strict "vp above all pixels" test fails by one pixel
+// on perfectly good detections (that was a real bug).
 function vanishingPointLooksPlausible(vp, w, h, greenPts, pinkPts) {
   var minDetectedY = Math.min.apply(null, greenPts.concat(pinkPts).map(function(p){return p.y;}));
-  if (vp.y >= minDetectedY) return false;
+  if (vp.y > minDetectedY + 0.03 * h) return false;
   if (vp.x < -w || vp.x > 2*w) return false;
   if (vp.y < -3*h) return false;
   return true;
@@ -2910,10 +2970,14 @@ async function processMeasurementRow(row) {
   if (greenPts.length < MIN_LINE_PIXELS) throw new Error('too few neon-green pixels detected (' + greenPts.length + ') — check overlay colour/thresholds');
   if (pinkPts.length  < MIN_LINE_PIXELS) throw new Error('too few pink pixels detected (' + pinkPts.length + ') — check overlay colour/thresholds');
 
-  var greenLine = robustFitLineXonY(greenPts);
-  var pinkLine  = robustFitLineXonY(pinkPts);
-  if (!greenLine) throw new Error('could not fit the neon-green line');
-  if (!pinkLine)  throw new Error('could not fit the pink line');
+  var imgDiag = Math.hypot(imageData.width, imageData.height);
+  var greenLine = ransacFitLine(greenPts, imgDiag);
+  var pinkLine  = ransacFitLine(pinkPts, imgDiag);
+  if (!greenLine) throw new Error('could not isolate a straight neon-green line (foliage/green objects may dominate the match — ' + greenPts.length + ' green pixels found)');
+  if (!pinkLine)  throw new Error('could not isolate a straight pink line (' + pinkPts.length + ' pink pixels found)');
+  // From here on, use only the pixels that actually lie on the fitted lines —
+  // stray colour matches (leaves, cabinets, signage) are excluded.
+  var greenIn = greenLine.inliers, pinkIn = pinkLine.inliers;
 
   var vp = findVpMarker(imageData);
   var vpSource = 'model marker';
@@ -2921,12 +2985,12 @@ async function processMeasurementRow(row) {
     vp = intersectLinesXonY(greenLine, pinkLine);
     vpSource = 'line intersection';
     if (!vp) throw new Error('green/pink lines look parallel — no vanishing point');
-    if (!vanishingPointLooksPlausible(vp, imageData.width, imageData.height, greenPts, pinkPts)) {
+    if (!vanishingPointLooksPlausible(vp, imageData.width, imageData.height, greenIn, pinkIn)) {
       throw new Error('computed vanishing point (' + Math.round(vp.x) + ',' + Math.round(vp.y) + ') is outside a plausible range for this photo — likely a bad line detection, not a real width');
     }
   }
 
-  var rawResult = computeWidthFromDetectedLines(greenPts, pinkPts, greenLine, pinkLine, vp, cal.eyeH);
+  var rawResult = computeWidthFromDetectedLines(greenIn, pinkIn, greenLine, pinkLine, vp, cal.eyeH, imageData.height);
   if (!rawResult.ok) {
     throw new Error('width estimate is unstable across the image (spread ' + Math.round(rawResult.spreadFraction*100) + '%) — likely a noisy line detection, not writing it');
   }
