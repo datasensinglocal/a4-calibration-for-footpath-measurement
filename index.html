@@ -2417,7 +2417,14 @@ function setCalMethodChoice(choice) {
 // Shared by both methods: persists whichever of S.calMethod1/S.calMethod2 was
 // just set (the other is left untouched), recomputes the active scaleFactor,
 // and shows the result step.
-function saveCalibrationAndShowResult() {
+function saveCalibrationAndShowResult(justCalibrated) {
+  // Auto-select the method that was just calibrated — testing it is the
+  // natural next step, and leaving the dropdown on the OTHER method made a
+  // fresh calibration look wrong (same lines, different number).
+  if (justCalibrated) {
+    S.calMethodChoice = justCalibrated;
+    localStorage.setItem('fp_calchoice_' + U.model, justCalibrated);
+  }
   S.scaleFactor = computeActiveScaleFactor();
   localStorage.setItem('fp_cal_' + U.model, JSON.stringify({ method1: S.calMethod1, method2: S.calMethod2 }));
   updateCalBadge();
@@ -2457,7 +2464,7 @@ function doCalibrate() {
   var raw = widthMMRaw();
   if (!(raw > 0)) { showToast('Could not compute a width — check the lines are positioned','error'); return; }
   S.calMethod1 = refMM / raw;
-  saveCalibrationAndShowResult();
+  saveCalibrationAndShowResult('method1');
 }
 var CAL_STEP_IDS = ['cal-step-choose','cal-step-method1','cal-step-method2','cal-step-a4tap','cal-step-result'];
 function hideAllCalSteps() {
@@ -2640,7 +2647,7 @@ function finishA4Tapping() {
   S.aMode = false;
   S.aPts = [];
   redraw();
-  saveCalibrationAndShowResult();
+  saveCalibrationAndShowResult('method2');
 }
 
 // ─── EXPORT CSV ────────────────────────────────────────────────────────────────
