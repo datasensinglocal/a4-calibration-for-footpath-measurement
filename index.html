@@ -2720,11 +2720,13 @@ function fetchDriveImageBlob(ref) {
   // Large photos come over in base64 slices (see handleGetDriveImage_) —
   // request sequentially until the reassembled string reaches `total`.
   var parts = [], got = 0, mime = 'image/jpeg';
+  window._lastImageFetchDebug = '';
   function next() {
     return postToScript(Object.assign({}, base, { offset: got })).then(function(d) {
       if (!d || typeof d.base64 !== 'string' || !d.base64.length || typeof d.total !== 'number') {
         throw new Error('Drive read returned no image data' + (d && d.error ? ': ' + d.error : '') + ' — file may be unreadable or the script needs redeploying');
       }
+      if (got === 0 && d._debugSource) window._lastImageFetchDebug = d._debugSource;
       parts.push(d.base64);
       got += d.base64.length;
       if (d.mimeType) mime = d.mimeType;
@@ -3086,7 +3088,7 @@ async function processMeasurementRow(row) {
   }
 
   await postToScript(Object.assign({ action:'updateMeasurementWidth', s_code: row.s_code, point_code: row.point_code, rowIndex: row.rowIndex }, updates));
-  return { summary: parts.join(', '), vpSource: vpSource };
+  return { summary: parts.join(', '), vpSource: vpSource, imgSource: window._lastImageFetchDebug || '' };
 }
 
 function processLog(msg, cls) {
@@ -3120,7 +3122,7 @@ async function runMeasurementsProcessing() {
     processLog('Row ' + (i+1) + '/' + rows.length + ' — ' + (row.s_code||'?') + ' / ' + (row.point_code||'?') + '…');
     try {
       var result = await processMeasurementRow(row);
-      processLog('  → ' + result.summary + ' ✓ (vp: ' + result.vpSource + ')', 'ok');
+      processLog('  → ' + result.summary + ' ✓ (vp: ' + result.vpSource + (result.imgSource ? ', img: ' + result.imgSource : '') + ')', 'ok');
       ok++;
     } catch (e) {
       if (e.authExpired) {
